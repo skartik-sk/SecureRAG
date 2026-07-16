@@ -1,0 +1,28 @@
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Environment Variables & Local Secrets
+.env
+.env.local
+.env.*
+!.env.example
+
+# Local LLM/Embedding Model Cache Caches
+.cache/
+.huggingface/
+
+# Mac OS metadata files
+.DS_Store
+Thumbs.db
+
+
+my_docs_folder
