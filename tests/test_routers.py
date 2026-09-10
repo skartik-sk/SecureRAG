@@ -135,51 +135,89 @@ def test_landing_page(client):
     assert "t.me/SecureRAG_bot" in body and "/docs" in body
 
 
-def test_demo_chat_answers(client, session):
-    from app.routers.demo import _hits
-    from app.services.users import ensure_system_user
-    from app.services.workspaces import create_workspace
-    from seed import DEMO_SLUG
-
-    _hits.clear()
-    ensure_system_user(session)
-    create_workspace(session, ensure_system_user(session), "Demo Delivery Policy")
-    ws = session.query(type(create_workspace(session, ensure_system_user(session), "x"))).first()
-    session.query(type(ws)).filter_by(slug="demo-delivery-policy").one().slug = DEMO_SLUG
-    session.commit()
-    c, s = client
-    r = c.post("/api/v1/demo/chat", json={"message": "What is the delivery SLA?"})
-    assert r.status_code == 200
-    body = r.json()
-    assert body["answer"] == "Answer [1]" and body["refused"] is False
 
 
-def test_demo_chat_validates_and_404s(client):
-    from app.routers.demo import _hits
-    _hits.clear()
-    c, s = client
+class RecordingGraph(FakeGraph):
+    """FakeGraph that records invoke states for multi-turn assertions."""
+    def __init__(self):
+        self.states = []
+
+    def invoke(self, state, config=None):
+        self.states.append(dict(state))
+        return {"answer": "Answer [1]", "sources": [{"file": "a.md", "section": None}],
+                "refused": None, "history": []}
+
+
+@pytest.fixture
+def demo_client(client, monkeypatch):
+    import app.routers.demo as demo_mod
+
+    demo_mod._hits.clear()
+    demo_mod._sessions.clear()
+    graph = RecordingGraph()
+    monkeypatch.setattr(demo_mod, "_graph", graph)
+    c, _settings = client
+    return c, graph
+
+
+def test_demo_chat_is_ephemeral_never_touches_db(demo_client, session):
+    """The headline guarantee: demo chat creates zero rows — no users, no
+    conversations, no workspace writes."""
+    from sqlalchemy import func, select
+
+    from app.models import Conversation, User, Workspace
+
+    c, graph = demo_client
+    counts_before = {
+        "users": session.scalar(select(func.count()).select_from(User)),
+        "conversations": session.scalar(select(func.count()).select_from(Conversation)),
+        "workspaces": session.scalar(select(func.count()).select_from(Workspace)),
+    }
+    r1 = c.post("/api/v1/demo/chat", json={"message": "What is the SLA?"})
+    r2 = c.post("/api/v1/demo/chat",
+                json={"message": "and for Zone B?", "session_id": r1.json()["session_id"]})
+    assert r1.status_code == 200 and r2.status_code == 200
+    assert r1.json()["answer"] == "Answer [1]" and r1.json()["refused"] is False
+
+    counts_after = {
+        "users": session.scalar(select(func.count()).select_from(User)),
+        "conversations": session.scalar(select(func.count()).select_from(Conversation)),
+        "workspaces": session.scalar(select(func.count()).select_from(Workspace)),
+    }
+    assert counts_before == counts_after
+
+    # multi-turn: same session id returned, and the second call carried history
+    assert r1.json()["session_id"] == r2.json()["session_id"]
+    assert graph.states[1]["history"], "second call must include prior turns"
+
+
+def test_demo_chat_unknown_session_gets_fresh_one(demo_client):
+    c, graph = demo_client
+    r = c.post("/api/v1/demo/chat", json={"message": "hi", "session_id": "bogus"})
+    assert r.status_code == 200 and r.json()["session_id"] != "bogus"
+
+
+def test_demo_session_expires(demo_client):
+    import app.routers.demo as demo_mod
+
+    c, _ = demo_client
+    demo_mod._sessions["old"] = demo_mod.DemoSession(expires=0)
+    r = c.post("/api/v1/demo/chat", json={"message": "hi", "session_id": "old"})
+    assert r.json()["session_id"] != "old" and "old" not in demo_mod._sessions
+
+
+def test_demo_chat_validates(demo_client):
+    c, _ = demo_client
     assert c.post("/api/v1/demo/chat", json={"message": ""}).status_code == 400
     assert c.post("/api/v1/demo/chat", json={"message": "x" * 501}).status_code == 400
-    r = c.post("/api/v1/demo/chat", json={"message": "hello"})
-    assert r.status_code == 404 and "not seeded" in r.json()["detail"]
 
 
-def test_demo_chat_rate_limited(client, session, monkeypatch):
+def test_demo_chat_rate_limited(demo_client, monkeypatch):
     import app.routers.demo as demo_mod
-    from app.services.users import ensure_system_user
-    from app.services.workspaces import create_workspace
-    from seed import DEMO_SLUG
 
-    _hits = demo_mod._hits
-    _hits.clear()
+    c, _ = demo_client
     monkeypatch.setattr(demo_mod, "_MAX_PER_WINDOW", 2)
-    ensure_system_user(session)
-    ws = create_workspace(session, ensure_system_user(session), "Demo Delivery Policy")
-    ws.slug = DEMO_SLUG
-    session.commit()
-    c, s = client
     assert c.post("/api/v1/demo/chat", json={"message": "q1"}).status_code == 200
     assert c.post("/api/v1/demo/chat", json={"message": "q2"}).status_code == 200
     r = c.post("/api/v1/demo/chat", json={"message": "q3"})
     assert r.status_code == 429 and "Too many" in r.json()["detail"]
-    _hits.clear()

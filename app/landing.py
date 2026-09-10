@@ -254,10 +254,11 @@ Answers include [n] citations; if the documents can't answer, I'll tell you.</di
                    document.getElementById('st').style.background = '#f59e0b';
                    document.getElementById('st').style.animation = 'none'; });
 
-  // --- live demo chat ---
+  // --- live demo chat (ephemeral: in-memory session, nothing persisted) ---
   (function () {
     const msgs = document.getElementById('msgs'), q = document.getElementById('q'),
           send = document.getElementById('send'), sugs = document.getElementById('sugs');
+    let sid = sessionStorage.getItem('securerag-demo-sid') || '';
     function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
     function render(text) { return esc(text).replace(/\\*\\*([^*\\n]+)\\*\\*/g, '<b>$1</b>'); }
     function bubble(cls, html) {
@@ -275,9 +276,10 @@ Answers include [n] citations; if the documents can't answer, I'll tell you.</di
       try {
         const r = await fetch('/api/v1/demo/chat', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: text })
+          body: JSON.stringify({ message: text, session_id: sid || null })
         });
         const data = await r.json();
+        if (data.session_id) { sid = data.session_id; sessionStorage.setItem('securerag-demo-sid', sid); }
         typing.className = 'msg bot';
         if (!r.ok) { typing.classList.add('err'); typing.textContent = data.detail || 'Something went wrong.'; }
         else {
