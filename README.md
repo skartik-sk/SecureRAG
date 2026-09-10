@@ -43,6 +43,33 @@ Telegram ⇄ python-telegram-bot (polling or webhook)      HTTP clients
   SQLAlchemy models: users, workspaces, workspace_members, documents, conversations
 ```
 
+## Project structure
+
+```
+SecureRAG/
+├── api/
+│   └── index.py              # Vercel serverless entrypoint (routes everything here)
+├── app/
+│   ├── bot/                  # Telegram bot: command handlers, inline keyboards, formatting
+│   ├── rag/                  # The pipeline: hybrid retrieval (FTS + RRF + MMR),
+│   │                         #   embeddings client, Groq LLM, prompts, LangGraph graph
+│   ├── routers/              # REST API: workspaces, documents, chat, public demo, webhook
+│   ├── services/             # Business logic: ingest, chat, users, workspaces
+│   ├── config.py             # All settings (pydantic-settings, env-driven)
+│   ├── db.py                 # SQLAlchemy engine + session factory
+│   ├── landing.py            # Landing page served at /
+│   ├── main.py               # FastAPI app factory, lazy startup, bot lifecycle
+│   ├── models.py             # SQLAlchemy models (users, workspaces, docs, conversations)
+│   └── security.py           # RBAC helpers (owner/editor/viewer) + API-key auth
+├── scripts/
+│   └── seed.py               # Seed the three demo workspaces from my_docs_folder/
+├── tests/                    # 112 tests (parsers, RBAC, routers, retrieval, bot)
+├── docker-compose.yml        # Local stack: app + pgvector/pg16 Postgres
+├── Dockerfile                # Container image (same code, non-serverless)
+├── vercel.json               # Serverless config: single function, 60s, 1 GB
+└── requirements.txt          # Serverless-friendly pins (no torch, no docling)
+```
+
 ## Setup
 
 Prereqs: Python 3.12, Postgres 16 with pgvector.
