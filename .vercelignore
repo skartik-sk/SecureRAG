@@ -1,0 +1,10 @@
+pyproject.toml
+.env
+.git
+data/
+my_docs_folder/
+docs/
+rag_phase*.py
+__pycache__/
+tests/
+.vercel
