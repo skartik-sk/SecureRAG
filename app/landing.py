@@ -1,6 +1,8 @@
 """Landing page served at / — the resume link should land on something
-presentable. Self-contained HTML (inline CSS, no external assets) so it stays
-serverless-friendly."""
+presentable. Design language: crisp, high-signal, editorial — pure white
+canvas, hairline zinc borders, obsidian typography, solid black actions,
+emerald verification accents. Self-contained HTML (inline CSS, no external
+assets) so it stays serverless-friendly."""
 
 LANDING_HTML = """<!DOCTYPE html>
 <html lang="en">
@@ -8,67 +10,192 @@ LANDING_HTML = """<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SecureRAG — Multi-Workspace RAG Assistant</title>
-<meta name="description" content="Hybrid-retrieval RAG assistant with citations: Telegram bot + REST API, powered by LangGraph, pgvector and PostgreSQL.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🛡️%3C/text%3E%3C/svg%3E">
+<meta name="description" content="Hybrid-retrieval RAG assistant with inline citations: Telegram bot + REST API, powered by LangGraph, pgvector and PostgreSQL.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2309090b' stroke-width='2'%3E%3Cpath d='M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z'/%3E%3C/svg%3E">
 <style>
-  :root { --bg:#0b1020; --card:#121a30; --line:#223052; --text:#e8edf7; --dim:#93a1bd; --acc:#5eead4; --acc2:#818cf8; }
+  :root {
+    --z950:#09090b; --z900:#18181b; --z800:#27272a; --z500:#71717a; --z400:#a1a1aa;
+    --z200:#e4e4e7; --z300:#d4d4d8; --z100:#f4f4f5; --z50:#fafafa;
+    --emerald:#10b981; --emerald-bg:#ecfdf5; --emerald-text:#047857; --emerald-border:#a7f3d0;
+  }
   * { box-sizing:border-box; margin:0; padding:0; }
-  body { background:radial-gradient(1200px 600px at 80% -10%, #1b2a55 0%, var(--bg) 55%);
-         color:var(--text); font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
-         min-height:100vh; display:flex; align-items:center; justify-content:center; padding:32px 20px; }
-  .wrap { max-width:760px; width:100%; }
-  .badge { display:inline-flex; align-items:center; gap:8px; font-size:13px; color:var(--dim);
-           border:1px solid var(--line); border-radius:999px; padding:6px 14px; margin-bottom:22px; background:rgba(255,255,255,.02); }
-  .dot { width:8px; height:8px; border-radius:50%; background:#f59e0b; }
-  .dot.ok { background:var(--acc); }
-  h1 { font-size:clamp(34px,6vw,52px); letter-spacing:-.02em; }
-  h1 .grad { background:linear-gradient(90deg,var(--acc),var(--acc2)); -webkit-background-clip:text; background-clip:text; color:transparent; }
-  .tag { color:var(--dim); font-size:clamp(15px,2.4vw,18px); margin:14px 0 30px; line-height:1.6; }
-  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; margin-bottom:30px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px 18px; }
-  .card b { display:block; margin-bottom:6px; font-size:14.5px; }
-  .card span { color:var(--dim); font-size:13.5px; line-height:1.55; }
-  .actions { display:flex; gap:12px; flex-wrap:wrap; }
-  a.btn { text-decoration:none; font-weight:600; font-size:15px; border-radius:12px; padding:13px 22px; transition:transform .12s ease; }
-  a.btn:hover { transform:translateY(-1px); }
-  .primary { background:linear-gradient(90deg,#14b8a6,#6366f1); color:#06131a; }
-  .ghost { border:1px solid var(--line); color:var(--text); background:rgba(255,255,255,.03); }
-  footer { margin-top:34px; color:var(--dim); font-size:12.5px; border-top:1px solid var(--line); padding-top:16px; line-height:1.7; }
-  code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; color:var(--acc); }
+  html { scroll-behavior:smooth; }
+  body { background:#ffffff; color:var(--z800);
+         font-family:Inter,Geist,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+         -webkit-font-smoothing:antialiased; }
+  .container { max-width:1080px; margin:0 auto; padding:0 24px; }
+
+  /* header */
+  header { position:sticky; top:0; z-index:50; background:rgba(255,255,255,.9);
+           backdrop-filter:blur(12px); border-bottom:1px solid var(--z200); }
+  .nav { height:64px; display:flex; align-items:center; justify-content:space-between; }
+  .brand { display:flex; align-items:center; gap:10px; font-weight:700; color:var(--z950);
+           font-size:16px; letter-spacing:-.01em; text-decoration:none; }
+  .nav-right { display:flex; align-items:center; gap:8px; }
+  .nav-link { font-size:13.5px; font-weight:500; color:var(--z800); text-decoration:none;
+              padding:8px 12px; border-radius:8px; }
+  .nav-link:hover { background:var(--z100); color:var(--z950); }
+  .btn { display:inline-flex; align-items:center; gap:8px; font-weight:600; font-size:14px;
+         border-radius:10px; padding:10px 18px; text-decoration:none; cursor:pointer;
+         transition:background .15s ease, border-color .15s ease, transform .12s ease; }
+  .btn-black { background:var(--z950); color:#fff; }
+  .btn-black:hover { background:var(--z900); }
+  .btn-ghost { background:#fff; color:var(--z950); border:1px solid var(--z200); }
+  .btn-ghost:hover { background:var(--z50); border-color:var(--z300); }
+  .btn-sm { padding:8px 14px; font-size:13px; }
+
+  /* hero */
+  .hero { padding:88px 0 56px; text-align:left; }
+  .pill { display:inline-flex; align-items:center; gap:8px; font-size:12.5px; font-weight:500;
+          color:var(--emerald-text); background:var(--emerald-bg); border:1px solid var(--emerald-border);
+          border-radius:999px; padding:5px 14px; margin-bottom:24px; }
+  .dot { width:7px; height:7px; border-radius:50%; background:var(--emerald);
+         animation:pulse 2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { box-shadow:0 0 0 0 rgba(16,185,129,.45);} 50% { box-shadow:0 0 0 5px rgba(16,185,129,0);} }
+  h1 { font-size:clamp(36px,6vw,56px); font-weight:700; letter-spacing:-.03em; color:var(--z950);
+       line-height:1.05; }
+  h1 .dim { color:var(--z400); }
+  .sub { font-size:17px; line-height:1.65; color:var(--z500); max-width:640px; margin:20px 0 34px; }
+  .sub b { color:var(--z800); font-weight:600; }
+  .cta { display:flex; gap:12px; flex-wrap:wrap; }
+  .mono-hint { margin-top:18px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+               font-size:12px; color:var(--z500); }
+
+  /* telemetry strip */
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+           border:1px solid var(--z200); border-radius:14px; overflow:hidden; margin:56px 0 0; }
+  .stat { padding:18px 22px; background:#fff; border-left:1px solid var(--z200); }
+  .stat:first-child { border-left:none; }
+  .stat .k { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px;
+             text-transform:uppercase; letter-spacing:.08em; color:var(--z400); }
+  .stat .v { font-size:17px; font-weight:600; color:var(--z950); margin-top:5px; letter-spacing:-.01em; }
+
+  /* sections */
+  section { padding:64px 0 8px; }
+  .sec-head { font-size:24px; font-weight:600; letter-spacing:-.02em; color:var(--z900); margin-bottom:8px; }
+  .sec-sub { font-size:14.5px; color:var(--z500); margin-bottom:28px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:14px; }
+  .card { background:#fff; border:1px solid var(--z200); border-radius:14px; padding:22px;
+          transition:border-color .15s ease, transform .15s ease; }
+  .card:hover { border-color:var(--z300); transform:translateY(-1px); }
+  .card h3 { font-size:15.5px; font-weight:600; color:var(--z900); margin-bottom:8px;
+             display:flex; align-items:center; gap:9px; }
+  .card p { font-size:13.5px; line-height:1.65; color:var(--z500); }
+  .chip { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10.5px; padding:2px 8px;
+          border-radius:999px; border:1px solid var(--z200); color:var(--z500); background:var(--z50); }
+  .chip.sky { color:#0284c7; border-color:#bae6fd; background:#f0f9ff; }
+  .chip.emerald { color:var(--emerald-text); border-color:var(--emerald-border); background:var(--emerald-bg); }
+
+  /* how it works */
+  .steps { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px; }
+  .step { border:1px solid var(--z200); border-radius:14px; padding:22px; background:var(--z50); }
+  .step .n { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; color:var(--z400); }
+  .step h3 { font-size:15.5px; font-weight:600; color:var(--z900); margin:10px 0 7px; }
+  .step p { font-size:13.5px; line-height:1.6; color:var(--z500); }
+
+  /* code sample */
+  .terminal { background:var(--z100); border:1px solid var(--z200); border-radius:14px;
+              padding:20px 22px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+              font-size:12.5px; line-height:1.8; overflow-x:auto; }
+  .terminal .c1 { color:var(--z400); } .terminal .c2 { color:#0284c7; } .terminal .c3 { color:var(--z800); }
+
+  /* footer */
+  footer { border-top:1px solid var(--z200); margin-top:72px; padding:28px 0 44px; }
+  .foot { display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap;
+          font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; color:var(--z500); }
+  a { color:inherit; }
+  @media (max-width:640px) { .hero { padding-top:60px; } .stat { border-left:none; border-top:1px solid var(--z200); } .stat:first-child { border-top:none; } }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="badge"><span class="dot" id="st"></span><span id="stt">checking status…</span></div>
-  <h1>Secure<span class="grad">RAG</span></h1>
-  <p class="tag">A multi-workspace Retrieval-Augmented Generation assistant.
-     Send it documents, ask questions on Telegram or over REST, and get answers
-     with <b style="color:var(--text)">inline citations</b> — or a clean refusal when the
-     documents can't answer.</p>
 
-  <div class="grid">
-    <div class="card"><b>🔎 Hybrid retrieval</b><span>Postgres full-text (BM25-style lexical) + pgvector dense search, fused with Reciprocal Rank Fusion.</span></div>
-    <div class="card"><b>🎯 MMR + LLM rerank</b><span>Maximal Marginal Relevance diversification, then LLM relevance grading with query rewriting and retry.</span></div>
-    <div class="card"><b>💬 Multi-turn memory</b><span>Agentic LangGraph pipeline backed by a PostgreSQL checkpointer — resume any conversation.</span></div>
-    <div class="card"><b>🛡️ Workspace RBAC</b><span>Owner / editor / viewer roles, private &amp; public workspaces, a similarity guardrail against off-topic prompts.</span></div>
-    <div class="card"><b>📎 Any document</b><span>PDF, DOCX, PPTX, XLSX, HTML, Markdown — upload via Telegram or the REST API.</span></div>
-    <div class="card"><b>☁️ Serverless</b><span>Deployed on Vercel — API-driven LLM &amp; embeddings (Groq, Gemini) over Neon PostgreSQL with pgvector.</span></div>
+<header>
+  <div class="container nav">
+    <a class="brand" href="/">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#09090b" stroke-width="2" stroke-linejoin="round"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z"/><path d="M9 12l2 2 4-4" stroke="#10b981"/></svg>
+      SecureRAG
+    </a>
+    <nav class="nav-right">
+      <a class="nav-link" href="/docs">API Docs</a>
+      <a class="nav-link" href="/health">Health</a>
+      <a class="btn btn-black btn-sm" href="https://t.me/SecureRAG_bot">Open Telegram Bot</a>
+    </nav>
+  </div>
+</header>
+
+<main class="container">
+
+  <div class="hero">
+    <span class="pill"><span class="dot" id="st"></span><span id="stt">operational — live on Vercel</span></span>
+    <h1>Ask your documents.<br>Get <span class="dim">cited</span> answers.</h1>
+    <p class="sub">SecureRAG is a multi-workspace Retrieval-Augmented Generation assistant.
+       Upload PDFs, DOCX, spreadsheets or slides — then ask questions over <b>Telegram</b> or a
+       <b>REST API</b>. Every answer carries inline citations, mapped back to file and section;
+       if the documents can't answer, it says so.</p>
+    <div class="cta">
+      <a class="btn btn-black" href="https://t.me/SecureRAG_bot">Chat with the bot →</a>
+      <a class="btn btn-ghost" href="/docs">Explore the API</a>
+    </div>
+    <p class="mono-hint">POST /api/v1/workspaces/{slug}/chat &nbsp;·&nbsp; authenticate with X-API-Key</p>
+
+    <div class="stats">
+      <div class="stat"><div class="k">Retrieval</div><div class="v">Hybrid · RRF · MMR</div></div>
+      <div class="stat"><div class="k">Pipeline</div><div class="v">Agentic LangGraph</div></div>
+      <div class="stat"><div class="k">Memory</div><div class="v">Multi-turn, resumable</div></div>
+      <div class="stat"><div class="k">Access</div><div class="v">RBAC workspaces</div></div>
+    </div>
   </div>
 
-  <div class="actions">
-    <a class="btn primary" href="https://t.me/SecureRAG_bot">💬 Chat on Telegram</a>
-    <a class="btn ghost" href="/docs">📚 Interactive API docs</a>
-    <a class="btn ghost" href="/health">❤️ Health</a>
-  </div>
+  <section>
+    <div class="sec-head">How it works</div>
+    <div class="sec-sub">Three steps from raw documents to cited answers.</div>
+    <div class="steps">
+      <div class="step"><div class="n">01</div><h3>Ingest</h3><p>Send a file to the Telegram bot or POST it to the API. Parsers extract structure, a splitter chunks by headings, and an embedding model indexes every chunk into pgvector.</p></div>
+      <div class="step"><div class="n">02</div><h3>Retrieve</h3><p>Each question runs hybrid search — BM25-style lexical scoring and pgvector dense similarity, fused with Reciprocal Rank Fusion and diversified with MMR.</p></div>
+      <div class="step"><div class="n">03</div><h3>Answer</h3><p>The agent grades retrieved chunks, rewrites and retries when retrieval is thin, generates with [n] citations — or refuses honestly when the corpus can't answer.</p></div>
+    </div>
+  </section>
 
-  <footer>
-    Stack: <code>Python · FastAPI · LangGraph · pgvector · PostgreSQL · Telegram Bot API · Groq · Vercel</code><br>
-    REST base: <code>/api/v1/workspaces</code> — authenticate with <code>X-API-Key</code>.
-  </footer>
-</div>
+  <section>
+    <div class="sec-head">Built like a production system</div>
+    <div class="sec-sub">Not a notebook demo — a deployed service with tests, roles and guardrails.</div>
+    <div class="grid">
+      <div class="card"><h3>Hybrid retrieval <span class="chip sky">RRF</span></h3><p>Postgres full-text search fused with pgvector dense vectors via Reciprocal Rank Fusion; Maximal Marginal Relevance keeps answers diverse, not repetitive.</p></div>
+      <div class="card"><h3>Citations you can verify <span class="chip emerald">[n]</span></h3><p>Every claim maps to a source file and section. Cited numbers are extracted from the answer and rendered as a Sources block in Telegram and the API.</p></div>
+      <div class="card"><h3>Guardrail against off-topic</h3><p>A similarity-score gate refuses questions the corpus can't support — one rewrite-and-retry pass first, then an honest refusal instead of hallucination.</p></div>
+      <div class="card"><h3>Workspace RBAC</h3><p>Owner / editor / viewer roles with public and private workspaces. Private collections gate viewing, ingestion and management separately; invites are owner-gated.</p></div>
+      <div class="card"><h3>Multi-turn memory</h3><p>Conversations persist in PostgreSQL via a LangGraph checkpointer — pronoun-aware query rewriting uses history, and /resume continues any past thread.</p></div>
+      <div class="card"><h3>Serverless by design <span class="chip">Vercel</span></h3><p>LLM and embeddings are pure API calls; startup is lazy and idempotent; ingestion runs inline per request. Zero persistent local state beyond PostgreSQL.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">Try the API</div>
+    <div class="sec-sub">Any HTTP client works. Full schema in the <a href="/docs" style="color:#0284c7">interactive docs</a>.</div>
+    <div class="terminal">
+<span class="c1"># ask a workspace a question</span><br>
+<span class="c2">curl</span> -X POST https://securerag.vercel.app/api/v1/workspaces/delivery-policy/chat <br>
+&nbsp;&nbsp;-H <span class="c3">"X-API-Key: $KEY"</span> -H <span class="c3">"Content-Type: application/json"</span> <br>
+&nbsp;&nbsp;-d <span class="c3">'{"message": "What is the delivery SLA for Zone B?"}'</span><br><br>
+<span class="c1"># → {"answer": "Zone B: 2–3 business days [1]", "sources": [{"file": "delivery_policy.md", "section": "SLA"}]}</span>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="container foot">
+    <div>Python · FastAPI · LangGraph · pgvector · PostgreSQL · Telegram Bot API · Groq · Gemini</div>
+    <div>SecureRAG — built by <b style="color:var(--z800)">Singupalli Kartik</b></div>
+  </div>
+</footer>
+
 <script>
-  fetch('/health').then(r=>r.json()).then(()=>{document.getElementById('st').classList.add('ok');document.getElementById('stt').textContent='operational';})
-  .catch(()=>{document.getElementById('stt').textContent='status unknown';});
+  fetch('/health').then(r => r.json())
+    .then(() => { document.getElementById('stt').textContent = 'operational — live on Vercel'; })
+    .catch(() => { document.getElementById('stt').textContent = 'status unknown';
+                   document.getElementById('st').style.background = '#f59e0b';
+                   document.getElementById('st').style.animation = 'none'; });
 </script>
 </body>
 </html>"""
