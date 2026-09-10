@@ -25,4 +25,8 @@ __pycache__/
 Thumbs.db
 
 
-my_docs_folder
+my_docs_folder/
+data/
+
+# Vercel
+.vercel/
