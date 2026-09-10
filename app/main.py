@@ -109,11 +109,20 @@ async def shutdown(app: FastAPI) -> None:
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     s = settings or get_settings()
-    app = FastAPI(title="Telegram Multi-Workspace RAG", lifespan=lifespan)
+    app = FastAPI(title="Telegram Multi-Workspace RAG", lifespan=lifespan,
+                  docs_url="/docs", redoc_url=None)
     app.state.settings = s
     app.add_middleware(LazyInitMiddleware, target=app)
 
+    from fastapi.responses import HTMLResponse
+
+    from app.landing import LANDING_HTML
+
     from app.routers import chat, documents, health, telegram_webhook, workspaces
+
+    @app.get("/", include_in_schema=False)
+    async def landing() -> HTMLResponse:
+        return HTMLResponse(LANDING_HTML)
 
     app.include_router(health.router)
     app.include_router(workspaces.router)

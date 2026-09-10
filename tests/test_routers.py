@@ -124,3 +124,12 @@ async def test_webhook_passes_update_to_ptb(client, test_settings):
                     headers={"X-Telegram-Bot-Api-Secret-Token": test_settings.telegram_webhook_secret})
     assert r.status_code == 200
     assert app.state.ptb_app.updates[0].update_id == 1
+
+
+def test_landing_page(client):
+    c, s = client
+    r = c.get("/")
+    assert r.status_code == 200
+    body = r.text
+    assert "Secure" in body and "RAG" in body
+    assert "t.me/SecureRAG_bot" in body and "/docs" in body
