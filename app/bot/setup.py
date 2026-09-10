@@ -36,6 +36,7 @@ def build_application(settings: Settings, session_factory=None, graph=None) -> A
         ("newworkspace", handlers.cmd_newworkspace), ("new", handlers.cmd_new),
         ("resume", handlers.cmd_resume), ("demo", handlers.cmd_demo),
         ("invite", handlers.cmd_invite), ("promote", handlers.cmd_promote),
+        ("kick", handlers.cmd_kick),
         ("public", handlers.cmd_public), ("private", handlers.cmd_private),
     ]
     for name, fn in cmds:
@@ -56,6 +57,7 @@ BOT_COMMANDS = [
     ("demo", "Try the seeded demo workspace"),
     ("invite", "Add a member — /invite @user [editor|viewer]"),
     ("promote", "Change a member's role — /promote @user editor"),
+    ("kick", "Remove a member — /kick @user (owner)"),
     ("public", "Make workspace public (owner)"),
     ("private", "Make workspace private (owner)"),
     ("help", "Show all commands"),

@@ -55,7 +55,7 @@ def _normalize_citations(text: str) -> str:
 
 
 def build_graph(llm, store_for_slug: Callable, settings: Settings | None = None,
-                checkpointer=None):
+                checkpointer=None, hybrid_for_slug: Callable | None = None):
     s = settings or Settings(_env_file=None)
 
     def guard(state: RAGState) -> dict:
@@ -73,8 +73,12 @@ def build_graph(llm, store_for_slug: Callable, settings: Settings | None = None,
         return update
 
     def retrieve(state: RAGState) -> dict:
-        store = store_for_slug(state["workspace_slug"])
-        results = store.similarity_search_with_score(state["rewritten"], k=s.retrieve_k)
+        if hybrid_for_slug is not None:
+            results = hybrid_for_slug(state["workspace_slug"], state["rewritten"],
+                                      s.retrieve_k)
+        else:
+            store = store_for_slug(state["workspace_slug"])
+            results = store.similarity_search_with_score(state["rewritten"], k=s.retrieve_k)
         docs = [d for d, _ in results]
         dists = [dist for _, dist in results]
         return {"retrieved": docs, "distances": dists}
@@ -172,6 +176,13 @@ def get_graph(settings: Settings | None = None):
         from app.rag.vectorstore import get_store
 
         s = settings or get_settings()
+        if s.enable_hybrid:
+            from app.rag.hybrid import hybrid_search_with_score
+
+            hybrid_for_slug = lambda slug, q, k: hybrid_search_with_score(  # noqa: E731
+                s, slug, q, k)
+        else:
+            hybrid_for_slug = None
         pool = ConnectionPool(s.database_url_plain, open=True, check=False, timeout=10,
                               min_size=1, max_size=3, kwargs={"autocommit": True})
         from langgraph.checkpoint.postgres import PostgresSaver
@@ -184,5 +195,6 @@ def get_graph(settings: Settings | None = None):
             lambda slug: get_store(s, slug, get_embeddings(s)),
             settings=s,
             checkpointer=checkpointer,
+            hybrid_for_slug=hybrid_for_slug,
         )
     return _production

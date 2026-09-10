@@ -4,7 +4,7 @@ import logging
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from app.bot.format import esc, format_answer, split_message
+from app.bot.format import esc, format_answer_parts
 from app.bot.keyboards import (
     DEMO_QUESTIONS, conversations_keyboard, demo_keyboard, new_chat_keyboard,
     workspace_keyboard,
@@ -84,6 +84,7 @@ async def cmd_help(update, context):
         "/demo — try the seeded policy workspace\n"
         "/invite @user [editor|viewer] — add a member (private workspaces)\n"
         "/promote @user editor — change a member's role (owner)\n"
+        "/kick @user — remove a member (owner)\n"
         "/public /private — toggle privacy (owner)\n"
         "Send a PDF/DOCX/PPTX/XLSX/HTML/MD file to index it. Or just ask a question.",
         parse_mode="HTML")
@@ -260,6 +261,37 @@ async def cmd_promote(update, context):
 
 
 @safe_handler
+async def cmd_kick(update, context):
+    username = ((context.args or [""])[0]).lstrip("@").strip()
+    if not username:
+        await update.effective_message.reply_text("Usage: /kick @username")
+        return
+    with _container(context).session_factory() as session:
+        user, _ = _user_and_settings(context, session, update)
+        ws = session.get(Workspace, user.current_workspace_id) if user.current_workspace_id else None
+        target = session.query(UserModel).filter(
+            UserModel.telegram_username == username).one_or_none()
+        if ws is None or target is None:
+            await update.effective_message.reply_text(
+                "They need to /start the bot first, and you must be in a workspace.")
+            return
+        if not can_manage(ws, role_of(session, ws, user)):
+            await update.effective_message.reply_text("Only the workspace owner can do that.")
+            return
+        member = session.get(WorkspaceMember, (ws.id, target.id))
+        if member is None:
+            await update.effective_message.reply_text(f"@{username} isn't a member.")
+            return
+        if member.role == "owner":
+            await update.effective_message.reply_text("The owner can't be removed.")
+            return
+        session.delete(member)
+        session.commit()
+        await update.effective_message.reply_text(
+            f"✅ @{esc(username)} removed from <b>{esc(ws.name)}</b>.", parse_mode="HTML")
+
+
+@safe_handler
 async def cmd_public(update, context):
     await _set_privacy(update, context, False)
 
@@ -328,7 +360,7 @@ async def on_callback(update, context):
             result = await asyncio.to_thread(run_chat, session, user, ws, question,
                                              _container(context).graph)
             session.commit()
-            for part in split_message(format_answer(result.answer, result.sources)):
+            for part in format_answer_parts(result.answer, result.sources):
                 await query.message.reply_text(part, parse_mode="HTML")
 
 
@@ -434,5 +466,5 @@ async def on_text(update, context):
                                          _container(context).graph)
         session.commit()
     sources = [] if result.refused else result.sources
-    for part in split_message(format_answer(result.answer, sources)):
+    for part in format_answer_parts(result.answer, sources):
         await update.effective_message.reply_text(part, parse_mode="HTML")

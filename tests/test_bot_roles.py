@@ -110,3 +110,42 @@ async def test_promote_rejects_invalid_role(owner_env):
     upd = fake_update(text="/promote @someone owner")
     await cmd_promote(upd, ctx)
     assert "editor or viewer" in " ".join(upd.effective_message.reply_text.texts)
+
+
+@pytest.mark.asyncio
+async def test_kick_removes_member(owner_env):
+    from app.bot.handlers import cmd_invite, cmd_kick
+
+    session, priv, ctx, owner = owner_env
+    session.add(User(telegram_id=120, telegram_username="erin", display_name="Erin"))
+    session.commit()
+    ctx.args = ["@erin"]
+    await cmd_invite(fake_update(text="/invite @erin"), ctx)
+    assert _member(session, priv, "erin").role == "viewer"
+    upd = fake_update(text="/kick @erin")
+    await cmd_kick(upd, ctx)
+    assert session.get(WorkspaceMember, (priv.id,
+                       session.query(User).filter_by(telegram_username="erin").one().id)) is None
+    assert "removed" in " ".join(upd.effective_message.reply_text.texts)
+
+
+@pytest.mark.asyncio
+async def test_kick_requires_owner(env):
+    from app.bot.handlers import cmd_kick
+    from app.services.chat import start_conversation
+    from app.services.users import ensure_system_user
+    from app.services.workspaces import create_workspace
+
+    session, ctx = env
+    owner = ensure_system_user(session)
+    ws = create_workspace(session, owner, "Kick WS", is_private=True)
+    get_or_create_user(session, ctx.bot_data["container"].settings,
+                       telegram_id=42, username="kartik")
+    fred = get_or_create_user(session, ctx.bot_data["container"].settings,
+                              telegram_id=99, username="fred")
+    start_conversation(session, fred, ws)  # fred selects someone else's workspace
+    session.commit()
+    ctx.args = ["@kartik"]
+    upd = fake_update(text="/kick @kartik", tg_id=99, username="fred")
+    await cmd_kick(upd, ctx)
+    assert "Only the workspace owner" in " ".join(upd.effective_message.reply_text.texts)

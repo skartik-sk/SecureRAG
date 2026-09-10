@@ -1,6 +1,6 @@
 # Telegram Multi-Workspace RAG
 
-A production-shaped RAG assistant you can talk to on **Telegram** (or over a small **REST API**). Ask questions about a workspace's documents and get answers with **inline citations**. Multiple workspaces (teams / topics) share one Postgres + pgvector backend, each fully isolated. Answers are produced by an **agentic LangGraph pipeline** that retrieves, grades/reranks chunks, retries with a rewritten query when retrieval comes back empty, and refuses when the corpus can't answer.
+A production-shaped RAG assistant you can talk to on **Telegram** (or over a small **REST API**). Ask questions about a workspace's documents and get answers with **inline citations**. Multiple workspaces (teams / topics) share one Postgres + pgvector backend, each fully isolated. Answers are produced by an **agentic LangGraph pipeline** running **hybrid retrieval** — Postgres full-text (BM25-style lexical) + pgvector dense search fused via **Reciprocal Rank Fusion**, diversified with **MMR**, then **LLM-graded reranking** — that retries with a rewritten query when retrieval comes back empty and refuses when the corpus can't answer.
 
 ## What it does
 
@@ -120,6 +120,7 @@ curl -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
 | `/demo` | Jump to the seeded policy workspace + sample questions |
 | `/invite @user [editor\|viewer]` | Add a member to your private workspace (default viewer) |
 | `/promote @user editor` | Change a member's role (owner only) |
+| `/kick @user` | Remove a member (owner only) |
 | `/public` `/private` | Toggle workspace privacy (owner only) |
 
 Or just send a file to index it, or type a question to chat.
