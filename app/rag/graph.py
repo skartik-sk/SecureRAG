@@ -48,6 +48,12 @@ def _text(reply) -> str:
     return content if isinstance(content, str) else str(content)
 
 
+def _normalize_citations(text: str) -> str:
+    """Models occasionally emit fullwidth 【1】 citations — canonicalize to [1]
+    so answer text and source mapping agree."""
+    return text.replace("【", "[").replace("】", "]")
+
+
 def build_graph(llm, store_for_slug: Callable, settings: Settings | None = None,
                 checkpointer=None):
     s = settings or Settings(_env_file=None)
@@ -110,7 +116,7 @@ def build_graph(llm, store_for_slug: Callable, settings: Settings | None = None,
             context=_numbered(docs),
             question=state["rewritten"],
         )
-        answer = _text(llm.invoke(prompt)).strip()
+        answer = _normalize_citations(_text(llm.invoke(prompt)).strip())
         cited = {int(n) - 1 for n in re.findall(r"\[(\d+)\]", answer)
                  if 0 < int(n) <= len(docs)}
         used = [docs[i] for i in sorted(cited)] or docs

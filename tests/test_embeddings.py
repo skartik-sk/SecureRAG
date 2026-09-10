@@ -57,3 +57,17 @@ def test_retries_on_upstream_error(monkeypatch):
     emb = OpenAICompatEmbeddings("https://x.example/v1", "key", "m")
     assert emb.embed_query("hi") == [0.0] * 4
     assert state["n"] == 3
+
+
+def test_provider_omitting_index_field(monkeypatch):
+    """Gemini's OpenAI-compat layer returns data items without `index`."""
+    def fake_post(url, headers=None, json=None, timeout=None):
+        texts = json["input"]
+        payload = {"data": [{"object": "embedding", "embedding": [float(len(t))] * 4}
+                            for t in texts]}
+        return FakeResponse(payload)
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    emb = OpenAICompatEmbeddings("https://x.example/v1", "key", "m")
+    out = emb.embed_documents(["a", "bb", "ccc"])
+    assert out == [[1.0] * 4, [2.0] * 4, [3.0] * 4]

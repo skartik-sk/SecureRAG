@@ -139,3 +139,11 @@ def test_memory_persists_across_invocations():
     history = out["history"]
     contents = [m.content for m in history]
     assert Q in contents and "and for zone 2?" in contents  # same thread accumulated
+
+
+def test_normalize_citations_fullwidth():
+    from app.rag.graph import _normalize_citations
+
+    assert _normalize_citations("Zones A and B【1】 take 2 days【12】.") == \
+        "Zones A and B[1] take 2 days[12]."
+    assert _normalize_citations("plain [3] stays") == "plain [3] stays"

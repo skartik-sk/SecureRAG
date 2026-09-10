@@ -37,7 +37,10 @@ class OpenAICompatEmbeddings(Embeddings):
                 if r.status_code in (429, 500, 502, 503, 504):
                     raise RuntimeError(f"embeddings upstream {r.status_code}: {r.text[:200]}")
                 r.raise_for_status()
-                data = sorted(r.json()["data"], key=lambda d: d["index"])
+                data = r.json()["data"]
+                if all("index" in d for d in data):
+                    data = sorted(data, key=lambda d: d["index"])
+                # else: provider omits `index` (e.g. Gemini) and preserves input order
                 return [d["embedding"] for d in data]
             except Exception as e:  # noqa: BLE001 — retry transport/upstream errors
                 last = e
