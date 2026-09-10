@@ -133,3 +133,53 @@ def test_landing_page(client):
     body = r.text
     assert "Secure" in body and "RAG" in body
     assert "t.me/SecureRAG_bot" in body and "/docs" in body
+
+
+def test_demo_chat_answers(client, session):
+    from app.routers.demo import _hits
+    from app.services.users import ensure_system_user
+    from app.services.workspaces import create_workspace
+    from seed import DEMO_SLUG
+
+    _hits.clear()
+    ensure_system_user(session)
+    create_workspace(session, ensure_system_user(session), "Demo Delivery Policy")
+    ws = session.query(type(create_workspace(session, ensure_system_user(session), "x"))).first()
+    session.query(type(ws)).filter_by(slug="demo-delivery-policy").one().slug = DEMO_SLUG
+    session.commit()
+    c, s = client
+    r = c.post("/api/v1/demo/chat", json={"message": "What is the delivery SLA?"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["answer"] == "Answer [1]" and body["refused"] is False
+
+
+def test_demo_chat_validates_and_404s(client):
+    from app.routers.demo import _hits
+    _hits.clear()
+    c, s = client
+    assert c.post("/api/v1/demo/chat", json={"message": ""}).status_code == 400
+    assert c.post("/api/v1/demo/chat", json={"message": "x" * 501}).status_code == 400
+    r = c.post("/api/v1/demo/chat", json={"message": "hello"})
+    assert r.status_code == 404 and "not seeded" in r.json()["detail"]
+
+
+def test_demo_chat_rate_limited(client, session, monkeypatch):
+    import app.routers.demo as demo_mod
+    from app.services.users import ensure_system_user
+    from app.services.workspaces import create_workspace
+    from seed import DEMO_SLUG
+
+    _hits = demo_mod._hits
+    _hits.clear()
+    monkeypatch.setattr(demo_mod, "_MAX_PER_WINDOW", 2)
+    ensure_system_user(session)
+    ws = create_workspace(session, ensure_system_user(session), "Demo Delivery Policy")
+    ws.slug = DEMO_SLUG
+    session.commit()
+    c, s = client
+    assert c.post("/api/v1/demo/chat", json={"message": "q1"}).status_code == 200
+    assert c.post("/api/v1/demo/chat", json={"message": "q2"}).status_code == 200
+    r = c.post("/api/v1/demo/chat", json={"message": "q3"})
+    assert r.status_code == 429 and "Too many" in r.json()["detail"]
+    _hits.clear()

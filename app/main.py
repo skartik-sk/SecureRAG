@@ -118,13 +118,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     from app.landing import LANDING_HTML
 
-    from app.routers import chat, documents, health, telegram_webhook, workspaces
+    from app.routers import chat, demo, documents, health, telegram_webhook, workspaces
 
     @app.get("/", include_in_schema=False)
     async def landing() -> HTMLResponse:
         return HTMLResponse(LANDING_HTML)
 
     app.include_router(health.router)
+    app.include_router(demo.router)
     app.include_router(workspaces.router)
     app.include_router(documents.router)
     app.include_router(chat.router)

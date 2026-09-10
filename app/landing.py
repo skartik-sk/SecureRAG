@@ -99,6 +99,36 @@ LANDING_HTML = """<!DOCTYPE html>
               font-size:12.5px; line-height:1.8; overflow-x:auto; }
   .terminal .c1 { color:var(--z400); } .terminal .c2 { color:#0284c7; } .terminal .c3 { color:var(--z800); }
 
+  /* chat demo */
+  .chat { background:#fff; border:1px solid var(--z200); border-radius:14px; overflow:hidden; }
+  .chat-head { display:flex; align-items:center; justify-content:space-between; gap:10px;
+               padding:13px 18px; border-bottom:1px solid var(--z200); background:var(--z50); }
+  .chat-head b { font-size:13.5px; color:var(--z900); }
+  .msgs { padding:18px; display:flex; flex-direction:column; gap:10px; min-height:220px;
+          max-height:380px; overflow-y:auto; }
+  .msg { max-width:82%; padding:10px 14px; border-radius:12px; font-size:13.5px; line-height:1.6; }
+  .msg.user { align-self:flex-end; background:var(--z950); color:#fff; border-bottom-right-radius:4px; }
+  .msg.bot { align-self:flex-start; background:var(--z50); border:1px solid var(--z200);
+             color:var(--z800); border-bottom-left-radius:4px; white-space:pre-wrap; }
+  .msg.bot.err { color:#b45309; background:var(--z50); border-color:#fde68a; }
+  .msg .src { display:block; margin-top:8px; padding-top:8px; border-top:1px solid var(--z200);
+              font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px; color:var(--z500); }
+  .msg.typing span { display:inline-block; width:6px; height:6px; margin-right:3px; border-radius:50%;
+                     background:var(--z400); animation:blink 1.2s infinite; }
+  .msg.typing span:nth-child(2) { animation-delay:.2s; } .msg.typing span:nth-child(3) { animation-delay:.4s; }
+  @keyframes blink { 0%,80%,100% { opacity:.25; } 40% { opacity:1; } }
+  .chat-input { display:flex; gap:10px; padding:14px 18px; border-top:1px solid var(--z200); }
+  .chat-input input { flex:1; background:#fff; border:1px solid var(--z200); border-radius:10px;
+                      padding:11px 14px; font-size:14px; color:var(--z900); outline:none;
+                      font-family:inherit; transition:border-color .15s ease; }
+  .chat-input input:focus { border-color:var(--z950); }
+  .chat-input input:disabled { background:var(--z100); color:var(--z400); }
+  .sugs { display:flex; gap:8px; flex-wrap:wrap; padding:0 18px 14px; }
+  .sug { font-size:12px; font-weight:500; color:var(--z800); background:#fff; border:1px solid var(--z200);
+         border-radius:999px; padding:6px 13px; cursor:pointer; transition:border-color .15s ease; }
+  .sug:hover { border-color:var(--z300); background:var(--z50); }
+  .sug:disabled { opacity:.5; cursor:default; }
+
   /* footer */
   footer { border-top:1px solid var(--z200); margin-top:72px; padding:28px 0 44px; }
   .foot { display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap;
@@ -181,6 +211,33 @@ LANDING_HTML = """<!DOCTYPE html>
     </div>
   </section>
 
+  <section>
+    <div class="sec-head">Try it live</div>
+    <div class="sec-sub">This is the real pipeline — hybrid retrieval, reranking and the citation
+       guardrail — answering from the seeded <b style="color:var(--z800)">delivery-policy</b> workspace.
+       On Telegram it works the same way with your own documents.</div>
+    <div class="chat">
+      <div class="chat-head">
+        <b>SecureRAG · delivery-policy</b>
+        <span class="chip emerald" style="font-size:10.5px; padding:3px 10px;">● online</span>
+      </div>
+      <div class="msgs" id="msgs">
+        <div class="msg bot">Hi! Ask me anything about the delivery policy — try a suggestion below.
+Answers include [n] citations; if the documents can't answer, I'll tell you.</div>
+      </div>
+      <div class="sugs" id="sugs">
+        <button class="sug">What is the delivery SLA for Zone B?</button>
+        <button class="sug">Which goods are classified as special goods?</button>
+        <button class="sug">Who won the football world cup?</button>
+      </div>
+      <div class="chat-input">
+        <input id="q" type="text" maxlength="500" placeholder="Ask about the delivery policy…"
+               autocomplete="off">
+        <button class="btn btn-black" id="send">Ask</button>
+      </div>
+    </div>
+  </section>
+
 </main>
 
 <footer>
@@ -196,6 +253,48 @@ LANDING_HTML = """<!DOCTYPE html>
     .catch(() => { document.getElementById('stt').textContent = 'status unknown';
                    document.getElementById('st').style.background = '#f59e0b';
                    document.getElementById('st').style.animation = 'none'; });
+
+  // --- live demo chat ---
+  (function () {
+    const msgs = document.getElementById('msgs'), q = document.getElementById('q'),
+          send = document.getElementById('send'), sugs = document.getElementById('sugs');
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+    function render(text) { return esc(text).replace(/\\*\\*([^*\\n]+)\\*\\*/g, '<b>$1</b>'); }
+    function bubble(cls, html) {
+      const d = document.createElement('div'); d.className = 'msg ' + cls; d.innerHTML = html;
+      msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight; return d;
+    }
+    let busy = false;
+    async function ask(text) {
+      text = (text || '').trim();
+      if (!text || busy) return;
+      busy = true; q.value = ''; q.disabled = true; send.disabled = true;
+      [...sugs.children].forEach(b => b.disabled = true);
+      bubble('user', esc(text));
+      const typing = bubble('bot typing', '<span></span><span></span><span></span>');
+      try {
+        const r = await fetch('/api/v1/demo/chat', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: text })
+        });
+        const data = await r.json();
+        typing.className = 'msg bot';
+        if (!r.ok) { typing.classList.add('err'); typing.textContent = data.detail || 'Something went wrong.'; }
+        else {
+          typing.innerHTML = render(data.answer) + (data.refused ? '' :
+            (data.sources || []).map((s, i) =>
+              `<span class="src">[${i + 1}] ${esc(s.file || 'unknown')}${s.section ? ' — ' + esc(s.section) : ''}</span>`).join(''));
+        }
+      } catch (e) {
+        typing.className = 'msg bot err'; typing.textContent = 'Network error — try again.';
+      }
+      busy = false; q.disabled = false; send.disabled = false;
+      [...sugs.children].forEach(b => b.disabled = false); q.focus();
+    }
+    send.addEventListener('click', () => ask(q.value));
+    q.addEventListener('keydown', e => { if (e.key === 'Enter') ask(q.value); });
+    [...sugs.children].forEach(b => b.addEventListener('click', () => ask(b.textContent)));
+  })();
 </script>
 </body>
 </html>"""
