@@ -19,6 +19,7 @@ class RAGState(TypedDict):
     retrieved: list
     distances: list[float]
     relevant: list
+    graded_count: int
     answer: str
     sources: list[dict]
     refused: str | None
@@ -88,12 +89,16 @@ def build_graph(llm, store_for_slug: Callable, settings: Settings | None = None,
         listing = "\n\n".join(f"{i}) {d.page_content[:600]}" for i, d in enumerate(docs))
         prompt = GRADE_PROMPT.format(question=state["rewritten"], chunks=listing)
         idx = set(_parse_grade(_text(llm.invoke(prompt)), len(docs)))
-        relevant = [d for i, (d, dist) in enumerate(zip(docs, state["distances"]))
-                    if i in idx and dist <= s.off_topic_distance]
-        return {"relevant": relevant}
+        # Soft rerank: LLM-graded chunks lead, the rest of the strong
+        # retrieval follows — the cite-only generator stays the final gate.
+        graded, rest = [], []
+        for i, (d, dist) in enumerate(zip(docs, state["distances"])):
+            if dist <= s.off_topic_distance:
+                (graded if i in idx else rest).append(d)
+        return {"relevant": graded + rest, "graded_count": len(graded)}
 
     def route_after_grade(state: RAGState) -> str:
-        if state["relevant"]:
+        if state["graded_count"]:
             return "generate"
         if state["attempt"] == 0:
             return "rewrite"

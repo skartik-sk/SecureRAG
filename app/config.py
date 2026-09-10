@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     upload_dir: str = Field(default_factory=lambda: "/tmp/uploads" if os.getenv("VERCEL") else "data/uploads")
     inline_ingest: bool = Field(default_factory=lambda: os.getenv("VERCEL") == "1")
     enable_hybrid: bool = True  # lexical FTS + dense, RRF fusion, MMR
-    retrieve_k: int = 8
+    retrieve_k: int = 12
     top_n: int = 4
 
     @property

@@ -68,14 +68,16 @@ def test_happy_path_with_citations():
     assert any(str(m.content) == Q for m in out["history"] if isinstance(m, HumanMessage))
 
 
-def test_grading_filters_irrelevant_chunks():
+def test_grading_reranks_relevant_chunks_first():
     store = FakeStore([(_doc("a.md"), 0.1), (_doc("b.md"), 0.3), (_doc("c.md"), 0.5)])
     llm = FakeLLM(grades=[[0, 2]], answer="Use [1] and [2].")
     out = _mk(store, llm).invoke({"question": Q, "rewritten": Q, "attempt": 0,
                                   "workspace_slug": "ws1", "history": []}, config=CFG)
     ctx = llm.prompts[-1]
-    assert "content of a.md" in ctx and "content of c.md" in ctx
-    assert "content of b.md" not in ctx  # graded out — the rerank
+    # soft rerank: graded chunks (a, c) lead the context; ungraded b trails
+    assert "content of a.md" in ctx and "content of c.md" in ctx and "content of b.md" in ctx
+    assert ctx.index("content of a.md") < ctx.index("content of b.md")
+    assert ctx.index("content of c.md") < ctx.index("content of b.md")
     assert {s["file"] for s in out["sources"]} == {"a.md", "c.md"}
 
 

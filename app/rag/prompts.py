@@ -23,6 +23,9 @@ Chunks:
 {chunks}
 
 Which chunk numbers contain information needed to answer the question?
+Include a chunk when ANY part of it is relevant — e.g. it covers the topic,
+a mentioned entity, or one aspect of a multi-part question — even if it does
+not fully answer the question on its own.
 Reply with ONLY a JSON array of numbers, e.g. [0,2]. Reply [] if none are relevant.
 """
 

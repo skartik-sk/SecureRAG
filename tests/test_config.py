@@ -6,7 +6,7 @@ def test_defaults():
     assert s.bot_mode == "disabled"
     assert s.groq_model == "openai/gpt-oss-20b"
     assert s.off_topic_distance == 0.95
-    assert s.retrieve_k == 8 and s.top_n == 4
+    assert s.retrieve_k == 12 and s.top_n == 4
 
 
 def test_api_key_set_splits_and_strips():
