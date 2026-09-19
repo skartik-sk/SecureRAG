@@ -35,3 +35,6 @@ data/
 # Local scratch & internal notes (kept on disk, not part of the project)
 rag_phase*.py
 docs/
+
+# Private interview prep (never publish)
+INTERVIEW_PREP.md
