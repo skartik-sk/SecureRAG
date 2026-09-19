@@ -35,7 +35,7 @@ LANDING_HTML = """<!DOCTYPE html>
   .nav-link { font-size:13.5px; font-weight:500; color:var(--z800); text-decoration:none;
               padding:8px 12px; border-radius:8px; }
   .nav-link:hover { background:var(--z100); color:var(--z950); }
-  .btn { display:inline-flex; align-items:center; gap:8px; font-weight:600; font-size:14px;
+  .btn { display:inline-flex; align-items:center; gap:8px; font-weight:600; font-size:14px; white-space:nowrap;
          border-radius:10px; padding:10px 18px; text-decoration:none; cursor:pointer;
          transition:background .15s ease, border-color .15s ease, transform .12s ease; }
   .btn-black { background:var(--z950); color:#fff; }
@@ -136,6 +136,9 @@ LANDING_HTML = """<!DOCTYPE html>
   a { color:inherit; }
   @media (max-width:640px) {
     .hero { padding-top:44px; }
+    .brand { font-size:14px; }
+    .hide-sm { display:none; }
+    .nav-right { gap:4px; }
     h1 { font-size:30px; }
     .sub { font-size:15px; }
     .stat { border-left:none; border-top:1px solid var(--z200); }
@@ -157,7 +160,7 @@ LANDING_HTML = """<!DOCTYPE html>
     </a>
     <nav class="nav-right">
       <a class="nav-link" href="/docs">API Docs</a>
-      <a class="nav-link" href="/health">Health</a>
+      <a class="nav-link hide-sm" href="/health">Health</a>
       <a class="btn btn-black btn-sm" href="https://t.me/SecureRAG_bot">Open Telegram Bot</a>
     </nav>
   </div>
