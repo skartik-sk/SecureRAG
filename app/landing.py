@@ -134,7 +134,17 @@ LANDING_HTML = """<!DOCTYPE html>
   .foot { display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap;
           font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; color:var(--z500); }
   a { color:inherit; }
-  @media (max-width:640px) { .hero { padding-top:60px; } .stat { border-left:none; border-top:1px solid var(--z200); } .stat:first-child { border-top:none; } }
+  @media (max-width:640px) {
+    .hero { padding-top:44px; }
+    h1 { font-size:30px; }
+    .sub { font-size:15px; }
+    .stat { border-left:none; border-top:1px solid var(--z200); }
+    .stat:first-child { border-top:none; }
+    .nav { height:56px; }
+    .nav-link { padding:7px 8px; font-size:12.5px; }
+    .btn-sm { padding:8px 10px; font-size:12.5px; }
+    .msgs { max-height:300px; }
+  }
 </style>
 </head>
 <body>
