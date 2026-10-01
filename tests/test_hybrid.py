@@ -51,9 +51,12 @@ def test_hybrid_search_full_path(test_settings, db, monkeypatch):
     from sqlalchemy import text as sql
 
     from app.db import engine
+    from app.rag.vectorstore import get_store, reset_cache
 
     slug = "hybridws"
     eng = engine(test_settings)
+    get_store(test_settings, slug)  # first use creates the langchain_pg_* tables
+    reset_cache()  # so the search below rebuilds it with FakeEmb (patched get_embeddings)
     with eng.begin() as c:
         c.execute(sql("DELETE FROM langchain_pg_embedding WHERE collection_id IN "
                       "(SELECT uuid FROM langchain_pg_collection WHERE name = :n)"),
