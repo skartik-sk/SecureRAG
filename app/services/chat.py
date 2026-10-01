@@ -1,11 +1,14 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+from groq import RateLimitError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.models import Conversation, User, Workspace
+
+RATE_LIMIT_REPLY = ("⏳ I'm at my AI request limit right now — please try again in a few minutes.")
 
 
 @dataclass
@@ -14,6 +17,7 @@ class ChatResult:
     sources: list[dict]
     conversation_id: str
     refused: bool
+    rate_limited: bool = False
 
 
 def start_conversation(session: Session, user: User, workspace: Workspace,
@@ -61,11 +65,20 @@ def run_chat(session: Session, user: User, workspace: Workspace, message: str,
     from app.rag.graph import thread_id_for
 
     conv = _current_conversation(session, user, workspace)
-    state = graph.invoke(
-        {"question": message, "rewritten": message, "attempt": 0,
-         "workspace_slug": workspace.slug, "history": []},
-        config={"configurable": {"thread_id": thread_id_for(conv.id)}},
-    )
+    try:
+        state = graph.invoke(
+            {"question": message, "rewritten": message, "attempt": 0,
+             "workspace_slug": workspace.slug, "history": []},
+            config={"configurable": {"thread_id": thread_id_for(conv.id)}},
+        )
+    except RateLimitError:
+        # ChatGroq already retries with backoff; a terminal 429 means the
+        # quota window is out — tell the user instead of a generic 500.
+        conv.title = message.strip()[:64]
+        conv.last_message_at = datetime.now(timezone.utc)
+        session.commit()
+        return ChatResult(answer=RATE_LIMIT_REPLY, sources=[], conversation_id=conv.id,
+                          refused=False, rate_limited=True)
     refused = bool(state.get("refused"))
     answer = state["refused"] or state["answer"]
     if conv.title == "New chat":

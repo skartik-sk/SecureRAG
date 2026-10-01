@@ -84,3 +84,18 @@ class Conversation(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_message_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class AnswerFeedback(Base):
+    """One bot answer a user can rate 👍/👎 — real questions for future eval cases."""
+    __tablename__ = "answer_feedback"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    conversation_id: Mapped[str | None] = mapped_column(
+        ForeignKey("conversations.id", ondelete="SET NULL"), nullable=True)
+    question: Mapped[str] = mapped_column(Text)
+    answer: Mapped[str] = mapped_column(Text)
+    rating: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 1 | -1
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

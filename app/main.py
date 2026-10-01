@@ -7,6 +7,7 @@ from fastapi import FastAPI
 
 from app.config import Settings, get_settings
 from app.db import SessionLocal, init_db
+from app.logging_setup import setup_logging
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +109,7 @@ async def shutdown(app: FastAPI) -> None:
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
+    setup_logging()
     s = settings or get_settings()
     app = FastAPI(title="Telegram Multi-Workspace RAG", lifespan=lifespan,
                   docs_url="/docs", redoc_url=None)

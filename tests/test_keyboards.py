@@ -1,6 +1,6 @@
 from app.bot.keyboards import (
-    DEMO_QUESTIONS, conversations_keyboard, demo_keyboard, new_chat_keyboard,
-    workspace_keyboard,
+    DEMO_QUESTIONS, conversations_keyboard, demo_keyboard, feedback_keyboard,
+    new_chat_keyboard, workspace_keyboard,
 )
 
 
@@ -34,3 +34,10 @@ def test_demo_and_new_keyboards():
     assert demo_keyboard().inline_keyboard[0][0].callback_data == "dq:0"
     labels = [b.callback_data for b in new_chat_keyboard().inline_keyboard[0]]
     assert labels == ["nc:content", "nc:skip"]
+
+
+def test_feedback_keyboard():
+    kb = feedback_keyboard("fb123")
+    row = kb.inline_keyboard[0]
+    assert [(b.text, b.callback_data) for b in row] == \
+        [("👍", "fb:fb123:1"), ("👎", "fb:fb123:0")]

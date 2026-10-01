@@ -1,4 +1,5 @@
 import json
+import logging
 
 from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, HumanMessage
@@ -149,3 +150,34 @@ def test_normalize_citations_fullwidth():
     assert _normalize_citations("Zones A and B【1】 take 2 days【12】.") == \
         "Zones A and B[1] take 2 days[12]."
     assert _normalize_citations("plain [3] stays") == "plain [3] stays"
+
+
+def _trace_lines(caplog):
+    return [r.getMessage() for r in caplog.records if r.name == "app.rag.graph"]
+
+
+def test_trace_emits_one_line_per_node(caplog):
+    store = FakeStore([(_doc("sla.md", "Zones"), 0.2), (_doc("other.md"), 0.8)])
+    llm = FakeLLM(grades=[[0]])
+    with caplog.at_level(logging.INFO, logger="app.rag.graph"):
+        _mk(store, llm).invoke({"question": Q, "rewritten": Q, "attempt": 0,
+                                "workspace_slug": "ws1", "history": []}, config=CFG)
+    lines = _trace_lines(caplog)
+    assert any("node=guard" in m and "verdict=pass" in m and "distance=0.2" in m
+               for m in lines)
+    assert any("node=retrieve" in m and "k=2" in m for m in lines)
+    assert any("node=grade" in m and "graded=1" in m and "kept=2" in m for m in lines)
+    assert any("node=generate" in m and "sources=1" in m for m in lines)
+    assert all("elapsed_ms=" in m for m in lines)
+
+
+def test_trace_logs_guard_refusal_with_distance(caplog):
+    store = FakeStore([(_doc("a.md"), 0.99)])
+    llm = FakeLLM(grades=[[0]])
+    with caplog.at_level(logging.INFO, logger="app.rag.graph"):
+        _mk(store, llm).invoke({"question": "who won the world cup",
+                                "rewritten": "who won the world cup", "attempt": 0,
+                                "workspace_slug": "ws1", "history": []}, config=CFG)
+    assert any("node=guard" in m and "verdict=refuse" in m and "distance=0.99" in m
+               for m in _trace_lines(caplog))
+    assert not any("node=generate" in m for m in _trace_lines(caplog))

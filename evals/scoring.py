@@ -120,3 +120,20 @@ def sweep_guard(rows: list[tuple[float, int]], thresholds: list[float]) -> list[
         row.update(refusal_metrics(tp, fp, fn))
         out.append(row)
     return out
+
+
+def best_threshold(sweep_rows: list[dict]) -> dict | None:
+    """The sweep row worth configuring, if any: max F1; ties broken toward
+    higher precision (a guard false-positive blocks answerable questions before
+    the grader can recover, while a miss is saved downstream), then the median
+    threshold of the remaining band — the point most robust to drift."""
+    if not sweep_rows:
+        return None
+    top_f1 = max(r["f1"] for r in sweep_rows)
+    band = [r for r in sweep_rows if r["f1"] == top_f1]
+    top_p = max(r["precision"] for r in band)
+    band = [r for r in band if r["precision"] == top_p]
+    top_r = max(r["recall"] for r in band)
+    band = [r for r in band if r["recall"] == top_r]
+    median = sorted(r["threshold"] for r in band)[len(band) // 2]
+    return next(r for r in sweep_rows if r["threshold"] == median)

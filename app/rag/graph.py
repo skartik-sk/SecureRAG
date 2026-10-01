@@ -1,5 +1,7 @@
 import json
+import logging
 import re
+import time
 from typing import Annotated, Callable, TypedDict
 
 from langchain_core.documents import Document
@@ -9,6 +11,8 @@ from langgraph.graph.message import add_messages
 
 from app.config import Settings
 from app.rag.prompts import GENERATE_PROMPT, GRADE_PROMPT, REWRITE_PROMPT, format_history
+
+log = logging.getLogger("app.rag.graph")
 
 
 class RAGState(TypedDict):
@@ -55,6 +59,39 @@ def _normalize_citations(text: str) -> str:
     return text.replace("【", "[").replace("】", "]")
 
 
+def _trace_fields(name: str, state: dict, out: dict) -> str:
+    if name == "guard":
+        d = out.get("distances")
+        return f"distance={round(d[0], 3) if d else None} " \
+               f"verdict={'refuse' if out.get('refused') else 'pass'}"
+    if name == "retrieve":
+        return f"k={len(out['retrieved'])}"
+    if name == "grade":
+        return f"graded={out['graded_count']} kept={len(out['relevant'])} " \
+               f"attempt={state.get('attempt', 0)}"
+    if name == "rewrite":
+        return f"query={(out.get('rewritten') or '')[:80]!r}"
+    if name == "generate":
+        cited = len(re.findall(r"\[(\d+)\]", out["answer"]))
+        return f"citations={cited} sources={len(out['sources'])}"
+    if name == "refuse":
+        return f"reason={(out.get('refused') or '')[:60]!r}"
+    return ""
+
+
+def traced(fn: Callable) -> Callable:
+    """Emit one structured trace line per node execution —
+    `node=grade graded=1 kept=2 attempt=0 elapsed_ms=412` on logger app.rag.graph."""
+    def wrapped(state):
+        t0 = time.perf_counter()
+        out = fn(state)
+        log.info("node=%s %s elapsed_ms=%d", fn.__name__, _trace_fields(fn.__name__, state, out),
+                 round((time.perf_counter() - t0) * 1000))
+        return out
+    wrapped.__name__ = fn.__name__
+    return wrapped
+
+
 def build_graph(llm, store_for_slug: Callable, settings: Settings | None = None,
                 checkpointer=None, hybrid_for_slug: Callable | None = None):
     s = settings or Settings(_env_file=None)
@@ -64,6 +101,8 @@ def build_graph(llm, store_for_slug: Callable, settings: Settings | None = None,
         best = store.similarity_search_with_score(state["question"], k=1)
         update = {"history": [HumanMessage(content=state["question"])],
                   "answer": "", "sources": [], "refused": None}
+        if best:
+            update["distances"] = [best[0][1]]  # for the trace line
         if not best:
             update["refused"] = ("This workspace has no documents yet. Send me a file or "
                                  "paste some content first (/new).")
@@ -139,12 +178,9 @@ def build_graph(llm, store_for_slug: Callable, settings: Settings | None = None,
                 "history": [AIMessage(content=answer)]}
 
     g = StateGraph(RAGState)
-    g.add_node("guard", guard)
-    g.add_node("retrieve", retrieve)
-    g.add_node("grade", grade)
-    g.add_node("rewrite", rewrite)
-    g.add_node("refuse", refuse)
-    g.add_node("generate", generate)
+    for name, fn in (("guard", guard), ("retrieve", retrieve), ("grade", grade),
+                     ("rewrite", rewrite), ("refuse", refuse), ("generate", generate)):
+        g.add_node(name, traced(fn))
     g.add_edge(START, "guard")
     g.add_conditional_edges("guard", route_after_guard,
                             {"retrieve": "retrieve", "refuse": "refuse"})

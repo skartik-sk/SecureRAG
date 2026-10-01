@@ -221,3 +221,50 @@ def test_demo_chat_rate_limited(demo_client, monkeypatch):
     assert c.post("/api/v1/demo/chat", json={"message": "q2"}).status_code == 200
     r = c.post("/api/v1/demo/chat", json={"message": "q3"})
     assert r.status_code == 429 and "Too many" in r.json()["detail"]
+
+
+def test_chat_endpoint_reports_rate_limit(client, session):
+    import httpx
+    from groq import RateLimitError
+
+    c, s = client
+
+    class RateLimitedGraph:
+        def invoke(self, state, config=None):
+            request = httpx.Request("POST", "https://api.groq.com/x")
+            raise RateLimitError("TPD", response=httpx.Response(429, request=request),
+                                 body=None)
+
+    from app.services.users import ensure_system_user
+    from app.services.workspaces import create_workspace
+
+    c.app.state.graph = RateLimitedGraph()
+    owner = ensure_system_user(session)
+    create_workspace(session, owner, "RL WS")
+    session.commit()
+    r = c.post("/api/v1/workspaces/rl-ws/chat", headers=HEADERS, json={"message": "hi"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["rate_limited"] is True
+    assert "try again" in body["answer"].lower()
+
+
+def test_demo_chat_groq_rate_limit_returns_friendly_answer(demo_client, monkeypatch):
+    import httpx
+    from groq import RateLimitError
+
+    import app.routers.demo as demo_mod
+
+    class RateLimitedGraph:
+        def invoke(self, state, config=None):
+            request = httpx.Request("POST", "https://api.groq.com/x")
+            raise RateLimitError("TPD", response=httpx.Response(429, request=request),
+                                 body=None)
+
+    monkeypatch.setattr(demo_mod, "_graph", RateLimitedGraph())
+    c, _ = demo_client
+    r = c.post("/api/v1/demo/chat", json={"message": "what is the SLA?"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["refused"] is False
+    assert "try again" in body["answer"].lower()

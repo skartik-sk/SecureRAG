@@ -28,4 +28,5 @@ async def chat(request: Request, slug: str, payload: ChatRequest):
             request.app.state.graph, settings)
         session.commit()
         return ChatResponse(answer=result.answer, sources=result.sources,
-                            conversation_id=result.conversation_id, refused=result.refused)
+                            conversation_id=result.conversation_id, refused=result.refused,
+                            rate_limited=result.rate_limited)

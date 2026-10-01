@@ -2,8 +2,9 @@ from langchain_core.documents import Document
 
 from evals.auto import parse_questions, pick_chunks
 from evals.dataset import SEED_SLUGS, Case, fixed_cases
-from evals.scoring import (Outcome, abstained, classify, refusal_metrics,
-                           score_run, sweep_guard, sweep_thresholds)
+from evals.scoring import (Outcome, abstained, best_threshold, classify,
+                           refusal_metrics, score_run, sweep_guard,
+                           sweep_thresholds)
 
 
 def state(refused=None, answer="", sources=None):
@@ -153,6 +154,29 @@ class TestSweepGuard:
         assert out[1]["fn"] == 1          # 0.9 refuses nothing
 
 
+def _row(t, tp, fp, fn):
+    return {"threshold": t, "tp": tp, "fp": fp, "fn": fn, **refusal_metrics(tp, fp, fn)}
+
+
+class TestBestThreshold:
+    def test_returns_none_on_empty_rows(self):
+        assert best_threshold([]) is None
+
+    def test_picks_highest_f1(self):
+        rows = [_row(0.1, 1, 5, 0), _row(0.3, 3, 1, 0), _row(0.6, 1, 0, 2)]
+        assert best_threshold(rows)["threshold"] == 0.3
+
+    def test_f1_tie_prefers_higher_precision(self):
+        # a guard false-positive blocks answerable questions before the grader
+        # can recover; a miss is caught downstream — so precision wins ties
+        rows = [_row(0.3, 3, 2, 0), _row(0.6, 3, 0, 2)]  # both F1 0.75
+        assert best_threshold(rows)["threshold"] == 0.6
+
+    def test_full_tie_takes_median_threshold_of_band(self):
+        rows = [_row(0.2, 2, 0, 0), _row(0.4, 2, 0, 0), _row(0.6, 2, 0, 0)]
+        assert best_threshold(rows)["threshold"] == 0.4
+
+
 class TestParseQuestions:
     def test_numbered_lines(self):
         assert parse_questions("1. What is the fee?\n2. When is pickup?") == \
@@ -242,3 +266,113 @@ class TestFixedDataset:
     def test_cross_workspace_cases_exist_for_each_seed(self):
         cross = {c.workspace for c in fixed_cases() if c.category == "cross_workspace"}
         assert cross == set(SEED_SLUGS)
+
+
+class TestParseVerdict:
+    def test_clean_json(self):
+        from evals.judge import parse_verdict
+
+        assert parse_verdict('{"faithful": true, "reason": "all cited"}') == \
+            (True, "all cited")
+
+    def test_fenced_json(self):
+        from evals.judge import parse_verdict
+
+        verdict = parse_verdict('```json\n{"faithful": false, "reason": "invented the fee"}\n```')
+        assert verdict == (False, "invented the fee")
+
+    def test_json_in_prose(self):
+        from evals.judge import parse_verdict
+
+        verdict = parse_verdict('The verdict is {"faithful": true, "reason": "ok"} as noted.')
+        assert verdict == (True, "ok")
+
+    def test_garbage_is_unparseable(self):
+        from evals.judge import parse_verdict
+
+        assert parse_verdict("no json here") == (None, "")
+
+    def test_missing_faithful_key_is_unparseable(self):
+        from evals.judge import parse_verdict
+
+        assert parse_verdict('{"reason": "no verdict"}') == (None, "")
+
+
+class TestFaithfulnessSummary:
+    def test_counts_by_verdict(self):
+        from evals.judge import faithfulness_summary
+        from evals.scoring import Outcome
+
+        recs = [
+            {"outcome": Outcome.ANSWERED_CITED, "faithful": True},
+            {"outcome": Outcome.ANSWERED_CITED, "faithful": False},
+            {"outcome": Outcome.ANSWERED_CITED, "faithful": None},
+            {"outcome": Outcome.REFUSED},
+            {"outcome": Outcome.ANSWERED_CITED},  # not judged at all
+        ]
+        assert faithfulness_summary(recs) == {
+            "judged": 3, "faithful": 1, "unfaithful": 1, "unparsed": 1}
+
+    def test_empty(self):
+        from evals.judge import faithfulness_summary
+
+        assert faithfulness_summary([]) == {
+            "judged": 0, "faithful": 0, "unfaithful": 0, "unparsed": 0}
+
+
+class TestJudgeRecords:
+    def _cited(self, q="What is the SLA?"):
+        from evals.dataset import Case
+        from evals.scoring import Outcome
+
+        return {"case": Case(question=q, workspace="ws", expect="answer", category="answerable"),
+                "outcome": Outcome.ANSWERED_CITED, "answer": "48 hours [1]",
+                "contexts": ["chunk about 48 hours"]}
+
+    def test_judges_only_cited_answers(self):
+        from evals.dataset import Case
+        from evals.judge import judge_records
+        from evals.scoring import Outcome
+
+        class FakeLLM:
+            def __init__(self):
+                self.calls = 0
+
+            def invoke(self, prompt):
+                self.calls += 1
+                return '{"faithful": true, "reason": "supported"}'
+
+        llm = FakeLLM()
+        recs = [self._cited(),
+                {"case": Case(question="who won", workspace="ws", expect="refuse",
+                              category="off_topic"),
+                 "outcome": Outcome.REFUSED, "answer": "", "contexts": []}]
+        errors = judge_records(llm, recs)
+        assert llm.calls == 1
+        assert recs[0]["faithful"] is True
+        assert "faithful" not in recs[1]
+        assert errors == []
+
+    def test_llm_error_is_collected_not_raised(self):
+        from evals.judge import judge_records
+
+        class BoomLLM:
+            def invoke(self, prompt):
+                raise RuntimeError("429")
+
+        recs = [self._cited()]
+        errors = judge_records(BoomLLM(), recs)
+        assert len(errors) == 1 and "429" in errors[0]["error"]
+        assert "faithful" not in recs[0]
+
+    def test_unparseable_verdict_recorded(self):
+        from evals.judge import judge_records
+
+        class JunkLLM:
+            def invoke(self, prompt):
+                return "cannot say"
+
+        recs = [self._cited()]
+        errors = judge_records(JunkLLM(), recs)
+        assert errors == []
+        assert recs[0]["faithful"] is None

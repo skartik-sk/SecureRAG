@@ -31,3 +31,11 @@ def new_chat_keyboard() -> InlineKeyboardMarkup:
         InlineKeyboardButton("📝 I'll paste content", callback_data="nc:content"),
         InlineKeyboardButton("❓ Just chat", callback_data="nc:skip"),
     ]])
+
+
+def feedback_keyboard(feedback_id: str) -> InlineKeyboardMarkup:
+    """👍/👎 on a bot answer; the rating lands in answer_feedback."""
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("👍", callback_data=f"fb:{feedback_id}:1"),
+        InlineKeyboardButton("👎", callback_data=f"fb:{feedback_id}:0"),
+    ]])

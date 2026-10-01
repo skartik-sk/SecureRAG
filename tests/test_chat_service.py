@@ -1,3 +1,7 @@
+import httpx
+import pytest
+from groq import RateLimitError
+
 from app.models import Conversation, User, Workspace
 from app.services.chat import (
     ChatResult, list_conversations, resume_conversation, run_chat, start_conversation,
@@ -83,3 +87,31 @@ def test_list_and_resume_conversations(session):
     session.flush()
     assert resume_conversation(session, other, c1.id) is None  # not theirs
     assert resume_conversation(session, user, "no-such-id") is None
+
+
+class RateLimitedGraph:
+    def invoke(self, state, config=None):
+        request = httpx.Request("POST", "https://api.groq.com/openai/v1/chat/completions")
+        raise RateLimitError(
+            "Rate limit reached for model ... (TPD) ...",
+            response=httpx.Response(429, request=request), body=None)
+
+
+def test_run_chat_rate_limited_returns_friendly_result(session):
+    user, ws = _user_and_ws(session)
+    result = run_chat(session, user, ws, "What is the refund window?", RateLimitedGraph())
+    assert result.rate_limited is True
+    assert result.refused is False
+    assert result.sources == []
+    assert result.conversation_id  # conversation still created and titled
+    assert "try again" in result.answer.lower()
+
+
+def test_run_chat_other_errors_propagate(session):
+    class BrokenGraph:
+        def invoke(self, state, config=None):
+            raise ValueError("boom")
+
+    user, ws = _user_and_ws(session)
+    with pytest.raises(ValueError):
+        run_chat(session, user, ws, "q", BrokenGraph())

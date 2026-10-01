@@ -1,12 +1,16 @@
 # Telegram Multi-Workspace RAG
 
+[![CI](https://github.com/skartik-sk/SecureRAG/actions/workflows/ci.yml/badge.svg)](https://github.com/skartik-sk/SecureRAG/actions/workflows/ci.yml)
+
 A production-shaped RAG assistant you can talk to on **Telegram** (or over a small **REST API**). Ask questions about a workspace's documents and get answers with **inline citations**. Multiple workspaces (teams / topics) share one Postgres + pgvector backend, each fully isolated. Answers are produced by an **agentic LangGraph pipeline** running **hybrid retrieval** — Postgres full-text (BM25-style lexical) + pgvector dense search fused via **Reciprocal Rank Fusion**, diversified with **MMR**, then **LLM-graded reranking** — that retries with a rewritten query when retrieval comes back empty and refuses when the corpus can't answer.
 
 ## What it does
 
 - **Workspaces** — 2..N document collections per deployment. Public or private; private ones gate access via membership (owner / editor / viewer).
 - **Ingestion** — send a PDF, DOCX, PPTX, XLSX, HTML or MD file (≤ 20 MB) to the bot or `POST` it to the API. Files are parsed with lightweight parsers (pypdf / python-docx / python-pptx / openpyxl), split on markdown headers (fallback: recursive splitter), embedded via an **OpenAI-compatible embeddings API** (Together / Mistral / OpenAI — configurable) and stored per-workspace in **pgvector** collections (`ws_<slug>`).
-- **Chat** — every question runs through the graph below. Answers cite `[1]`, `[2]`… mapped to source file + section.
+- **Chat** — every question runs through the graph below. Answers cite `[1]`, `[2]`… mapped to source file + section, and carry **👍/👎 feedback buttons** — every answer is stored in Postgres (`answer_feedback`) as raw material for future eval cases.
+- **Resilience** — the LLM already retries 429s with backoff; if the quota window is truly exhausted the bot replies with a friendly "try again in a few minutes" instead of a generic error.
+- **Traceability** — `LOG_LEVEL=INFO` streams one structured line per graph node (`node=grade graded=1 kept=2 attempt=0 elapsed_ms=412` on the `app.rag.graph` logger) so live pipelines are debuggable without a tracing vendor.
 - **History** — conversations live in Postgres; the LangGraph checkpointer (`PostgresSaver`) restores thread memory so `/resume` continues where you left off.
 - **Demo mode** — `/demo` jumps to the seeded *Delivery Policy* workspace with tappable sample questions; `python3 scripts/seed.py` seeds three themed workspaces from `my_docs_folder/`.
 - **Deploys to Vercel** — 100% API-driven (LLM + embeddings + managed Postgres), webhook-mode bot, lazy serverless startup. See [Deploy to Vercel](#deploy-to-vercel).
@@ -206,12 +210,13 @@ Measures the refusal / "don't answer" behavior: labeled questions run through th
 ```bash
 python3 -m evals.run                              # fixed 50-case set on the 3 demo workspaces
 python3 -m evals.run --sweep                      # + guard threshold sweep (tune off_topic_distance)
+python3 -m evals.run --judge                      # + LLM-judged faithfulness of cited answers
 python3 -m evals.run --auto --workspace <slug>    # generate a set for ANY workspace from its chunks
 python3 -m evals.run --dataset evals/reports/<...>-dataset.json   # re-run a saved generated set
 python3 -m evals.run --seed                       # seed the demo workspaces first
 ```
 
-Needs `GROQ_API_KEY`, `EMBEDDINGS_API_KEY` and a reachable DB with the workspaces seeded. Categories: **answerable** (must answer, with citations), **near_miss** (corpus vocabulary, but the answer isn't in it), **off_topic** (general knowledge), **cross_workspace** (answerable only in a different workspace). Reports land in `evals/reports/*.json` (gitignored) with every raw answer for debugging. Auto mode writes answerable questions from the workspace's own chunks (reliable labels) plus a universal off-topic list; near-miss labels are deliberately not auto-generated — they depend on corpus content and LLM-generated labels there are noisy.
+Needs `GROQ_API_KEY`, `EMBEDDINGS_API_KEY` and a reachable DB with the workspaces seeded. Categories: **answerable** (must answer, with citations), **near_miss** (corpus vocabulary, but the answer isn't in it), **off_topic** (general knowledge), **cross_workspace** (answerable only in a different workspace). Reports land in `evals/reports/*.json` (gitignored) with every raw answer — and, with `--judge`, the context chunks each answer drew from — for debugging. `--sweep` also prints a **suggested `off_topic_distance`** for the corpus (max-F1 operating point, precision-favored ties), but refusals currently come from the LLM grader — adopt a lower threshold only deliberately. Auto mode writes answerable questions from the workspace's own chunks (reliable labels) plus a universal off-topic list; near-miss labels are deliberately not auto-generated — they depend on corpus content and LLM-generated labels there are noisy.
 
 ## Troubleshooting
 

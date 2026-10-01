@@ -11,10 +11,14 @@ import time
 from dataclasses import dataclass, field
 
 from fastapi import APIRouter, HTTPException, Request
+from groq import RateLimitError
 from langchain_core.messages import AIMessage, HumanMessage
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/v1/demo")
+
+DEMO_RATE_LIMIT_REPLY = ("⏳ The AI request limit is reached right now — "
+                         "please try again in a few minutes.")
 
 MAX_DEMO_CHARS = 500
 _WINDOW_SECONDS = 300
@@ -113,9 +117,15 @@ async def demo_chat(request: Request, body: DemoQuestion):
     for prev_q, prev_a in session.turns[-_HISTORY_TURNS:]:
         history += [HumanMessage(content=prev_q), AIMessage(content=prev_a)]
 
-    state = graph.invoke(
-        {"question": message, "rewritten": message, "attempt": 0,
-         "workspace_slug": DEMO_SLUG, "history": history})
+    try:
+        state = graph.invoke(
+            {"question": message, "rewritten": message, "attempt": 0,
+             "workspace_slug": DEMO_SLUG, "history": history})
+    except RateLimitError:
+        # ChatGroq already retried; the quota window is out — the landing-page
+        # demo just shows the friendly answer instead of a 500.
+        return {"answer": DEMO_RATE_LIMIT_REPLY, "sources": [], "refused": False,
+                "session_id": body.session_id or secrets.token_urlsafe(16)}
     refused = bool(state.get("refused"))
     answer = state.get("refused") or state.get("answer", "")
 

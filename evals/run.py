@@ -31,8 +31,11 @@ def parse_args(argv=None):
     p.add_argument("--workspace", help="workspace slug (required with --auto)")
     p.add_argument("--dataset", help="path to a saved dataset JSON instead of the fixed set")
     p.add_argument("--seed", action="store_true", help="seed the demo workspaces first")
+    p.add_argument("--judge", action="store_true",
+                   help="LLM-judge faithfulness of cited answers against their context")
     p.add_argument("--sweep", action="store_true",
-                   help="also score the guard distance threshold from 0.80 to 1.00")
+                   help="also sweep the guard distance threshold "
+                        "(calibrated from the distances observed in this run)")
     return p.parse_args(argv)
 
 
@@ -127,6 +130,8 @@ def run_cases(settings, cases):
                             "refused_text": state.get("refused"),
                             "answer": state.get("answer", ""),
                             "sources": state.get("sources", []),
+                            "contexts": [d.page_content
+                                         for d in state.get("relevant", [])[:settings.top_n]],
                             "latency_s": time.time() - t0})
             print(f"[{i}/{len(cases)}] {case.workspace} {outcome.value:18s} "
                   f"{time.time() - t0:4.1f}s  {case.question[:60]}", flush=True)
@@ -182,20 +187,44 @@ def print_report(summary, records, errors, sweep=None):
         for e in errors:
             print(f"  [{e['case'].workspace}] \"{e['case'].question[:60]}\" → {e['error']}")
 
+    if any("faithful" in r for r in records):
+        from evals.judge import faithfulness_summary
+
+        f = faithfulness_summary(records)
+        print(f"Faithfulness (LLM judge): {f['faithful']}/{f['judged']} faithful"
+              f" · {f['unfaithful']} unfaithful · {f['unparsed']} unparsed")
+        for r in records:
+            if r.get("faithful") is False:
+                print(f"  ✗ [{r['case'].workspace}] \"{r['case'].question[:60]}\"\n"
+                      f"    → {r.get('judge_reason', '')[:160]}")
+
     if sweep:
         print("\nGuard sweep (guard-only: best distance > t ⇒ refuse):")
         print("  t     TP    FP    FN    P      R")
         for row in sweep:
             print(f"  {row['threshold']:<6}{row['tp']:<5} {row['fp']:<5} {row['fn']:<5} "
                   f"{row['precision']:.3f}  {row['recall']:.3f}")
+        from evals.scoring import best_threshold
+
+        best = best_threshold(sweep)
+        if best:
+            print(f"\n  Suggested off_topic_distance for this corpus: {best['threshold']} "
+                  f"(guard-only P {best['precision']:.3f} · R {best['recall']:.3f}) — "
+                  "refusals currently come from the LLM grader, so only adopt it deliberately.")
 
 
 def _plain(r):
     c = r["case"]
-    return {"question": c.question, "workspace": c.workspace, "expect": c.expect,
-            "category": c.category, "outcome": r["outcome"].value,
-            "refused_text": r.get("refused_text"), "answer": r.get("answer"),
-            "sources": r.get("sources"), "latency_s": round(r.get("latency_s", 0), 2)}
+    out = {"question": c.question, "workspace": c.workspace, "expect": c.expect,
+           "category": c.category, "outcome": r["outcome"].value,
+           "refused_text": r.get("refused_text"), "answer": r.get("answer"),
+           "sources": r.get("sources"), "latency_s": round(r.get("latency_s", 0), 2)}
+    if r.get("contexts"):
+        out["contexts"] = r["contexts"]
+    if "faithful" in r:
+        out["faithful"] = r["faithful"]
+        out["judge_reason"] = r.get("judge_reason")
+    return out
 
 
 def save_report(settings, mode, summary, records, errors, sweep, extra_meta):
@@ -221,6 +250,9 @@ def save_report(settings, mode, summary, records, errors, sweep, extra_meta):
 
 
 def main(argv=None):
+    from app.logging_setup import setup_logging
+
+    setup_logging("WARNING")  # LOG_LEVEL=INFO also shows the per-node trace lines
     args = parse_args(argv)
     from evals.scoring import score_run, sweep_guard
 
@@ -258,6 +290,17 @@ def main(argv=None):
     print(f"Running {len(cases)} eval cases (mode: {mode})…", flush=True)
     records, errors = run_cases(settings, cases)
 
+    judge_errors = []
+    if args.judge and records:
+        from evals.judge import judge_records
+
+        from app.rag.llm import get_llm
+
+        print("Judging faithfulness of cited answers…", flush=True)
+        judge_errors = judge_records(get_llm(settings), records)
+        for e in judge_errors:
+            print(f"  judge error: [{e['case'].workspace}] \"{e['case'].question[:50]}\" → {e['error']}")
+
     summary = score_run(records)
     sweep = None
     if args.sweep and records:
@@ -268,9 +311,21 @@ def main(argv=None):
                                     for c in (r["case"] for r in records)]))
         sweep = sweep_guard(rows, sweep_thresholds(distances, settings.off_topic_distance))
 
+    extra_meta = {"cases": len(cases), "errors": len(errors)}
+    if sweep:
+        from evals.scoring import best_threshold
+
+        best = best_threshold(sweep)
+        if best:
+            extra_meta["suggested_threshold"] = best["threshold"]
+    if args.judge:
+        from evals.judge import faithfulness_summary
+
+        extra_meta["faithfulness"] = faithfulness_summary(records)
+        extra_meta["judge_errors"] = len(judge_errors)
+
     print_report(summary, records, errors, sweep)
-    path = save_report(settings, mode, summary, records, errors, sweep,
-                       {"cases": len(cases), "errors": len(errors)})
+    path = save_report(settings, mode, summary, records, errors, sweep, extra_meta)
     o = summary["overall"]
     print(f"\nRefusal P {o['precision']:.3f} · R {o['recall']:.3f} · F1 {o['f1']:.3f}"
           f"   Report → {path}")

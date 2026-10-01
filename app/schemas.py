@@ -17,6 +17,7 @@ class ChatResponse(BaseModel):
     sources: list[dict]
     conversation_id: str
     refused: bool
+    rate_limited: bool = False
 
 
 class WorkspaceOut(BaseModel):

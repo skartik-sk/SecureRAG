@@ -1,4 +1,6 @@
+import httpx
 import pytest
+from groq import RateLimitError
 from types import SimpleNamespace
 
 from app.models import User, Workspace
@@ -15,6 +17,17 @@ class Recorder:
         self.markups.append(reply_markup)
 
 
+class FakeCallbackQuery(SimpleNamespace):
+    answered = None
+    edited_markup = "unchanged"
+
+    async def answer(self, text=None):
+        self.answered = text
+
+    async def edit_message_reply_markup(self, reply_markup=None):
+        self.edited_markup = reply_markup
+
+
 def fake_update(*, text=None, document=None, callback_data=None, tg_id=42,
                 username="kartik", first="Kartik"):
     msg = SimpleNamespace(text=text, reply_text=Recorder(),
@@ -23,8 +36,8 @@ def fake_update(*, text=None, document=None, callback_data=None, tg_id=42,
                           if document else None,
                           chat=SimpleNamespace(id=tg_id))
     effective_message = msg
-    cq = SimpleNamespace(data=callback_data, answer=lambda: None,
-                         message=SimpleNamespace(reply_text=Recorder())) if callback_data else None
+    cq = FakeCallbackQuery(data=callback_data,
+                           message=SimpleNamespace(reply_text=Recorder())) if callback_data else None
     return SimpleNamespace(
         effective_user=SimpleNamespace(id=tg_id, username=username, first_name=first),
         effective_message=effective_message, effective_chat=SimpleNamespace(id=tg_id),
@@ -137,3 +150,99 @@ async def test_demo_switches_workspace(env):
     upd = fake_update(text="/demo")
     await handlers.cmd_demo(upd, ctx)
     assert upd.effective_message.reply_text.markups[0] is not None  # demo question buttons
+
+
+def _current_user(session, ctx):
+    from app.services.users import get_or_create_user
+
+    return get_or_create_user(session, ctx.bot_data["container"].settings, telegram_id=42)
+
+
+@pytest.mark.asyncio
+async def test_answer_comes_with_feedback_buttons(env):
+    from app.bot.handlers import on_text
+    from app.models import AnswerFeedback
+
+    session, ws, ctx = env
+    user = _current_user(session, ctx)
+    start_conversation(session, user, ws)
+    session.commit()
+    upd = fake_update(text="What is the policy?")
+    await on_text(upd, ctx)
+    kb = upd.effective_message.reply_text.markups[-1]
+    assert kb.inline_keyboard[0][0].callback_data.startswith("fb:")
+    fb = session.query(AnswerFeedback).one()
+    assert fb.rating is None and fb.question == "What is the policy?"
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_reply_gets_no_feedback_buttons(env):
+    from app.bot.handlers import on_text
+    from app.models import AnswerFeedback
+
+    session, ws, ctx = env
+
+    class RateLimitedGraph:
+        def invoke(self, state, config=None):
+            request = httpx.Request("POST", "https://api.groq.com/x")
+            raise RateLimitError("TPD", response=httpx.Response(429, request=request),
+                                 body=None)
+
+    ctx.bot_data["container"].graph = RateLimitedGraph()
+    user = _current_user(session, ctx)
+    start_conversation(session, user, ws)
+    session.commit()
+    upd = fake_update(text="hello")
+    await on_text(upd, ctx)
+    assert "try again" in upd.effective_message.reply_text.texts[-1].lower()
+    assert upd.effective_message.reply_text.markups[-1] is None
+    assert session.query(AnswerFeedback).count() == 0
+
+
+@pytest.mark.asyncio
+async def test_feedback_callback_rates_and_clears_buttons(env):
+    from app.bot.handlers import on_callback
+    from app.services.feedback import record_answer
+
+    session, ws, ctx = env
+    user = _current_user(session, ctx)
+    session.commit()
+    fb = record_answer(session, user, ws, None, "q", "a")
+    session.commit()
+    upd = fake_update(callback_data=f"fb:{fb.id}:1")
+    await on_callback(upd, ctx)
+    assert fb.rating == 1
+    assert upd.callback_query.edited_markup is None
+
+
+@pytest.mark.asyncio
+async def test_feedback_callback_ignores_foreign_row(env):
+    from app.bot.handlers import on_callback
+    from app.services.feedback import record_answer
+
+    session, ws, ctx = env
+    other = User(telegram_id=99, display_name="Other")
+    session.add(other)
+    session.flush()
+    fb = record_answer(session, other, ws, None, "q", "a")
+    session.commit()
+    upd = fake_update(callback_data=f"fb:{fb.id}:1")
+    await on_callback(upd, ctx)
+    assert fb.rating is None
+    assert upd.callback_query.edited_markup == "unchanged"
+
+
+@pytest.mark.asyncio
+async def test_demo_question_answer_gets_feedback_buttons(env):
+    from app.bot import handlers
+    from app.services.users import ensure_system_user
+    from app.services.workspaces import create_workspace
+
+    session, ws, ctx = env
+    demo = create_workspace(session, ensure_system_user(session), "Demo Delivery Policy")
+    demo.slug = handlers.DEMO_SLUG
+    session.commit()
+    upd = fake_update(callback_data="dq:0")
+    await handlers.on_callback(upd, ctx)
+    kb = upd.callback_query.message.reply_text.markups[-1]
+    assert kb.inline_keyboard[0][0].callback_data.startswith("fb:")

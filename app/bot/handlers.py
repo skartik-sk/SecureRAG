@@ -6,13 +6,14 @@ from telegram.ext import ContextTypes
 
 from app.bot.format import esc, format_answer_parts
 from app.bot.keyboards import (
-    DEMO_QUESTIONS, conversations_keyboard, demo_keyboard, new_chat_keyboard,
-    workspace_keyboard,
+    DEMO_QUESTIONS, conversations_keyboard, demo_keyboard, feedback_keyboard,
+    new_chat_keyboard, workspace_keyboard,
 )
 from app.models import User as UserModel
 from app.models import Workspace, WorkspaceMember
 from app.security import can_ingest, can_manage, can_view, role_of, visible_workspaces
 from app.services.chat import list_conversations, resume_conversation, run_chat, start_conversation
+from app.services.feedback import rate_feedback, record_answer
 from app.services.ingest import SUPPORTED_EXTS, ingest_document_sync, ingest_text_sync
 from app.services.users import get_or_create_user
 from app.services.workspaces import create_workspace, workspace_by_slug, workspace_stats
@@ -21,6 +22,14 @@ from seed import DEMO_SLUG
 logger = logging.getLogger(__name__)
 PASTE_MIN_CHARS = 120
 MAX_BYTES = 20 * 1024 * 1024
+
+
+async def _send_with_feedback(message_reply, parts, feedback_id):
+    """Send the answer parts, 👍/👎 riding on the last one."""
+    for part in parts[:-1]:
+        await message_reply(part, parse_mode="HTML")
+    await message_reply(parts[-1], parse_mode="HTML",
+                        reply_markup=feedback_keyboard(feedback_id))
 
 
 def _container(context: ContextTypes.DEFAULT_TYPE):
@@ -359,9 +368,17 @@ async def on_callback(update, context):
             start_conversation(session, user, ws)
             result = await asyncio.to_thread(run_chat, session, user, ws, question,
                                              _container(context).graph)
+            fb = record_answer(session, user, ws, result.conversation_id,
+                               question, result.answer)
             session.commit()
-            for part in format_answer_parts(result.answer, result.sources):
-                await query.message.reply_text(part, parse_mode="HTML")
+            await _send_with_feedback(query.message.reply_text,
+                                      format_answer_parts(result.answer, result.sources), fb.id)
+        elif prefix == "fb":
+            fb_id, _, val = value.partition(":")
+            rated = rate_feedback(session, user, fb_id, val)
+            session.commit()
+            if rated is not None:
+                await query.edit_message_reply_markup(reply_markup=None)
 
 
 @safe_handler
@@ -464,7 +481,13 @@ async def on_text(update, context):
             return
         result = await asyncio.to_thread(run_chat, session, user, ws, text,
                                          _container(context).graph)
+        fb = None
+        if not result.rate_limited:
+            fb = record_answer(session, user, ws, result.conversation_id, text, result.answer)
         session.commit()
+    if fb is None:  # rate-limited: no answer to rate
+        await update.effective_message.reply_text(result.answer, parse_mode="HTML")
+        return
     sources = [] if result.refused else result.sources
-    for part in format_answer_parts(result.answer, sources):
-        await update.effective_message.reply_text(part, parse_mode="HTML")
+    await _send_with_feedback(update.effective_message.reply_text,
+                              format_answer_parts(result.answer, sources), fb.id)
