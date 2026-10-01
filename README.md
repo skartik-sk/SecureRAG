@@ -199,6 +199,20 @@ Seed workspaces against the cloud DB from your machine with the same env values 
 python3 -m pytest tests/ -q     # needs local Postgres; rag_test DB is created automatically
 ```
 
+## Evals
+
+Measures the refusal / "don't answer" behavior: labeled questions run through the real pipeline and are scored on **refusal precision/recall** plus an **answer-sanity check** (answered with `[n]` citations + sources).
+
+```bash
+python3 -m evals.run                              # fixed 50-case set on the 3 demo workspaces
+python3 -m evals.run --sweep                      # + guard threshold sweep (tune off_topic_distance)
+python3 -m evals.run --auto --workspace <slug>    # generate a set for ANY workspace from its chunks
+python3 -m evals.run --dataset evals/reports/<...>-dataset.json   # re-run a saved generated set
+python3 -m evals.run --seed                       # seed the demo workspaces first
+```
+
+Needs `GROQ_API_KEY`, `EMBEDDINGS_API_KEY` and a reachable DB with the workspaces seeded. Categories: **answerable** (must answer, with citations), **near_miss** (corpus vocabulary, but the answer isn't in it), **off_topic** (general knowledge), **cross_workspace** (answerable only in a different workspace). Reports land in `evals/reports/*.json` (gitignored) with every raw answer for debugging. Auto mode writes answerable questions from the workspace's own chunks (reliable labels) plus a universal off-topic list; near-miss labels are deliberately not auto-generated — they depend on corpus content and LLM-generated labels there are noisy.
+
 ## Troubleshooting
 
 - **`extension "vector" is not available`** — install pgvector for your Postgres (`brew install pgvector`), then `CREATE EXTENSION vector;` in each database. On Supabase, enable it from the dashboard.

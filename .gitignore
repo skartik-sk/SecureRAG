@@ -38,3 +38,6 @@ docs/
 
 # Private interview prep (never publish)
 INTERVIEW_PREP.md
+
+# Eval run reports (regenerate anytime with python3 -m evals.run)
+evals/reports/
